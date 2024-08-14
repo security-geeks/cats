@@ -1,12 +1,11 @@
 package com.endava.cats.fuzzer.fields.within;
 
 import com.endava.cats.args.FilesArguments;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.strategy.FuzzingStrategy;
-import com.endava.cats.util.CatsUtil;
 import io.quarkus.test.junit.QuarkusTest;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.media.StringSchema;
@@ -20,7 +19,6 @@ import java.util.Map;
 
 @QuarkusTest
 class WithinControlCharsInStringFieldsValidateSanitizeFuzzerTest {
-    private final CatsUtil catsUtil = new CatsUtil();
     private ServiceCaller serviceCaller;
     private TestCaseListener testCaseListener;
     private FilesArguments filesArguments;
@@ -31,7 +29,7 @@ class WithinControlCharsInStringFieldsValidateSanitizeFuzzerTest {
         serviceCaller = Mockito.mock(ServiceCaller.class);
         testCaseListener = Mockito.mock(TestCaseListener.class);
         filesArguments = Mockito.mock(FilesArguments.class);
-        controlCharsWithinFieldsValidateSanitizeFuzzer = new WithinControlCharsInStringFieldsValidateSanitizeFuzzer(serviceCaller, testCaseListener, catsUtil, filesArguments);
+        controlCharsWithinFieldsValidateSanitizeFuzzer = new WithinControlCharsInStringFieldsValidateSanitizeFuzzer(serviceCaller, testCaseListener, filesArguments);
         Mockito.when(testCaseListener.isFieldNotADiscriminator(Mockito.anyString())).thenReturn(true);
         Mockito.when(testCaseListener.isFieldNotADiscriminator("pet#type")).thenReturn(false);
     }
@@ -45,9 +43,9 @@ class WithinControlCharsInStringFieldsValidateSanitizeFuzzerTest {
         FuzzingStrategy fuzzingStrategy = controlCharsWithinFieldsValidateSanitizeFuzzer.getFieldFuzzingStrategy(data, "field").get(1);
 
         Assertions.assertThat(fuzzingStrategy.getData().toString()).contains("\u0000");
-        Assertions.assertThat(controlCharsWithinFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern()).isEqualTo(ResponseCodeFamily.FOURXX);
-        Assertions.assertThat(controlCharsWithinFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualTo(ResponseCodeFamily.FOURXX);
-        Assertions.assertThat(controlCharsWithinFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualTo(ResponseCodeFamily.FOURXX);
+        Assertions.assertThat(controlCharsWithinFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX);
+        Assertions.assertThat(controlCharsWithinFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX);
+        Assertions.assertThat(controlCharsWithinFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX);
 
         Assertions.assertThat(controlCharsWithinFieldsValidateSanitizeFuzzer.description()).isNotNull();
         Assertions.assertThat(controlCharsWithinFieldsValidateSanitizeFuzzer.typeOfDataSentToTheService()).isNotNull();

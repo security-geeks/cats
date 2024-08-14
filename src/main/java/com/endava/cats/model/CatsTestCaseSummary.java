@@ -5,6 +5,10 @@ import lombok.Getter;
 
 import java.util.Locale;
 
+/**
+ * Represents a summary of a CATS test case.
+ * This summary includes information such as test case status, path, and execution time.
+ */
 @EqualsAndHashCode
 @Getter
 public class CatsTestCaseSummary implements Comparable<CatsTestCaseSummary> {
@@ -17,10 +21,17 @@ public class CatsTestCaseSummary implements Comparable<CatsTestCaseSummary> {
     private String resultDetails;
     private double timeToExecuteInSec;
     private String httpMethod;
+    private boolean switchedResult;
 
-    public static CatsTestCaseSummary fromCatsTestCase(String id, CatsTestCase testCase) {
+    /**
+     * Creates a CatsTestCaseSummary object from a CatsTestCase.
+     *
+     * @param testCase The CatsTestCase to generate the summary from.
+     * @return A CatsTestCaseSummary representing the summary of the provided CatsTestCase.
+     */
+    public static CatsTestCaseSummary fromCatsTestCase(CatsTestCase testCase) {
         CatsTestCaseSummary summary = new CatsTestCaseSummary();
-        summary.id = id;
+        summary.id = testCase.getTestId();
         summary.scenario = testCase.getScenario();
         summary.result = testCase.getResult();
         summary.fuzzer = testCase.getFuzzer();
@@ -29,6 +40,7 @@ public class CatsTestCaseSummary implements Comparable<CatsTestCaseSummary> {
         summary.resultDetails = testCase.getResultDetails();
         summary.timeToExecuteInSec = testCase.getResponse().getResponseTimeInMs() / 1000d;
         summary.httpMethod = testCase.getRequest().getHttpMethod().toLowerCase(Locale.ROOT);
+        summary.switchedResult = testCase.getResultIgnoreDetails() != null;
 
         return summary;
     }
@@ -49,14 +61,29 @@ public class CatsTestCaseSummary implements Comparable<CatsTestCaseSummary> {
         return num.isEmpty() ? 0 : Integer.parseInt(num);
     }
 
+    /**
+     * Gets a key derived from the test ID with spaces removed.
+     *
+     * @return The key for the test.
+     */
     public String getKey() {
         return id.replace(" ", "");
     }
 
+    /**
+     * Checks if the test result is an error.
+     *
+     * @return True if the result is an error, false otherwise.
+     */
     public boolean getError() {
         return this.result.equalsIgnoreCase("error");
     }
 
+    /**
+     * Checks if the test result is a warning.
+     *
+     * @return True if the result is a warning, false otherwise.
+     */
     public boolean getWarning() {
         return this.result.equalsIgnoreCase("warning");
     }

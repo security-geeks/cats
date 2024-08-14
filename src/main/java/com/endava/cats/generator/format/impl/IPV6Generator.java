@@ -4,10 +4,14 @@ import com.endava.cats.generator.format.api.InvalidDataFormatGenerator;
 import com.endava.cats.generator.format.api.OpenAPIFormat;
 import com.endava.cats.generator.format.api.ValidDataFormatGenerator;
 import io.swagger.v3.oas.models.media.Schema;
-
 import jakarta.inject.Singleton;
+
 import java.util.List;
 
+/**
+ * A generator class implementing interfaces for generating valid and invalid IPv6 address data formats.
+ * It also implements the OpenAPIFormat interface.
+ */
 @Singleton
 public class IPV6Generator implements ValidDataFormatGenerator, InvalidDataFormatGenerator, OpenAPIFormat {
     @Override
@@ -31,7 +35,7 @@ public class IPV6Generator implements ValidDataFormatGenerator, InvalidDataForma
     }
 
     @Override
-    public List<String> marchingFormats() {
+    public List<String> matchingFormats() {
         return List.of("ipv6");
     }
 }

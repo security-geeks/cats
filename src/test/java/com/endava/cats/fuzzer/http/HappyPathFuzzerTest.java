@@ -2,7 +2,7 @@ package com.endava.cats.fuzzer.http;
 
 import com.endava.cats.fuzzer.executor.SimpleExecutor;
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
@@ -53,7 +53,7 @@ class HappyPathFuzzerTest {
 
         happyFuzzer.fuzz(data);
 
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamily.TWOXX));
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamilyPredefined.TWOXX), Mockito.anyBoolean(), Mockito.eq(true));
     }
 
     @Test
@@ -71,7 +71,7 @@ class HappyPathFuzzerTest {
         FuzzingData data = FuzzingData.builder().path("path1").method(HttpMethod.POST).payload("{'field':'oldValue'}")
                 .reqSchema(new StringSchema()).responseCodes(Collections.singleton("200"))
                 .requestContentTypes(List.of("application/json")).build();
-        Mockito.when(serviceCaller.call(Mockito.any())).thenThrow(new RuntimeException("something went wrong"));
+        Mockito.when(serviceCaller.call(Mockito.any())).thenThrow(new RuntimeException("this is deliberately thrown for testing"));
 
         happyFuzzer.fuzz(data);
 

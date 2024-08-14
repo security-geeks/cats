@@ -6,18 +6,17 @@ import com.endava.cats.fuzzer.api.Fuzzer;
 import com.endava.cats.http.ResponseCodeFamily;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.io.ServiceData;
-import com.endava.cats.json.JsonUtils;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingConstraints;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.strategy.FuzzingStrategy;
-import com.endava.cats.util.CatsUtil;
+import com.endava.cats.util.CatsModelUtils;
 import com.endava.cats.util.ConsoleUtils;
 import com.endava.cats.util.FuzzingResult;
+import com.endava.cats.util.JsonUtils;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
-import io.swagger.v3.oas.models.media.ByteArraySchema;
 import io.swagger.v3.oas.models.media.Schema;
 
 import java.util.List;
@@ -29,17 +28,31 @@ import java.util.regex.Pattern;
  * This class performs the actual fuzzing. It can be extended to provide expected result codes based on different fuzzing scenarios.
  */
 public abstract class BaseFieldsFuzzer implements Fuzzer {
-    public static final String CATS_REMOVE_FIELD = "cats_remove_field";
-    protected final CatsUtil catsUtil;
+    private static final String CATS_REMOVE_FIELD = "cats_remove_field";
+    /**
+     * The logger used by all subclasses.
+     */
     protected final PrettyLogger logger = PrettyLoggerFactory.getLogger(getClass());
+    /**
+     * The test case listener to report test events.
+     */
     protected final TestCaseListener testCaseListener;
+    /**
+     * Files arguments.
+     */
     protected final FilesArguments filesArguments;
     private final ServiceCaller serviceCaller;
 
-    protected BaseFieldsFuzzer(ServiceCaller sc, TestCaseListener lr, CatsUtil cu, FilesArguments cp) {
+    /**
+     * Constructor for initializing common dependencies for fuzzing fields.
+     *
+     * @param sc The {@link ServiceCaller} used to make service calls
+     * @param lr The {@link TestCaseListener} for reporting test case events
+     * @param cp The {@link FilesArguments} for file-related arguments
+     */
+    protected BaseFieldsFuzzer(ServiceCaller sc, TestCaseListener lr, FilesArguments cp) {
         this.serviceCaller = sc;
         this.testCaseListener = lr;
-        this.catsUtil = cu;
         this.filesArguments = cp;
     }
 
@@ -52,7 +65,7 @@ public abstract class BaseFieldsFuzzer implements Fuzzer {
 
         List<String> fieldsToBeRemoved = filesArguments.getRefData(data.getPath()).entrySet()
                 .stream().filter(entry -> String.valueOf(entry.getValue()).equalsIgnoreCase(CATS_REMOVE_FIELD)).map(Map.Entry::getKey).toList();
-        logger.config("The following fields marked as [{}] in refData will not be fuzzed: {}", CATS_REMOVE_FIELD, fieldsToBeRemoved);
+        logger.note("The following fields marked as [{}] in refData will not be fuzzed: {}", CATS_REMOVE_FIELD, fieldsToBeRemoved);
 
         fieldsToBeRemoved.forEach(allFields::remove);
 
@@ -60,44 +73,57 @@ public abstract class BaseFieldsFuzzer implements Fuzzer {
             logger.skip("Skipped due to: no fields to fuzz!");
         } else {
             for (String fuzzedField : allFields) {
-                for (FuzzingStrategy fuzzingStrategy : this.getFieldFuzzingStrategy(data, fuzzedField)) {
+                logger.debug("Fuzzing {}", fuzzedField);
+                for (FuzzingStrategy fuzzingStrategy : this.getFieldFuzzingStrategy(data, fuzzedField)
+                        .stream().filter(fuzzingStrategy -> !fuzzingStrategy.isSkip())
+                        .toList()) {
                     logger.debug("Running strategy {} for {}", fuzzingStrategy.name(), fuzzedField);
-                    testCaseListener.createAndExecuteTest(logger, this, () -> process(data, fuzzedField, fuzzingStrategy));
+                    logger.debug("Payload {}", data.getPayload());
+                    testCaseListener.createAndExecuteTest(logger, this, () -> process(data, fuzzedField, fuzzingStrategy), data);
                 }
             }
         }
     }
 
+    /**
+     * Does the actual fuzzing logic.
+     *
+     * @param data            data with all the fuzzing context
+     * @param fuzzedField     the field being fuzzed
+     * @param fuzzingStrategy the strategy applied for fuzzing
+     */
     protected void process(FuzzingData data, String fuzzedField, FuzzingStrategy fuzzingStrategy) {
         FuzzingConstraints fuzzingConstraints = this.createFuzzingConstraints(data, fuzzingStrategy, fuzzedField);
 
-        testCaseListener.addScenario(logger, "Send [{}] in request fields: field [{}], value [{}], is required [{}]",
-                this.typeOfDataSentToTheService(), fuzzedField, fuzzingStrategy.truncatedValue(), fuzzingConstraints.getRequiredString());
-
         if (this.isFuzzingPossible(data, fuzzedField, fuzzingStrategy)) {
+            testCaseListener.addScenario(logger, "Send [{}] in request fields: field [{}], value [{}], is required [{}]",
+                    this.typeOfDataSentToTheService(), fuzzedField, fuzzingStrategy.truncatedValue(), fuzzingConstraints.getRequiredString());
             logger.debug("Fuzzing possible...");
-            FuzzingResult fuzzingResult = catsUtil.replaceField(data.getPayload(), fuzzedField, fuzzingStrategy);
+            FuzzingResult fuzzingResult = FuzzingStrategy.replaceField(data.getPayload(), fuzzedField, fuzzingStrategy);
             boolean isFuzzedValueMatchingPattern = this.isFuzzedValueMatchingPattern(fuzzingResult.fuzzedValue(), data, fuzzedField);
 
             ServiceData serviceData = ServiceData.builder().relativePath(data.getPath())
                     .headers(data.getHeaders()).payload(fuzzingResult.json()).httpMethod(data.getMethod()).contractPath(data.getContractPath())
-                    .fuzzedField(fuzzedField).queryParams(data.getQueryParams()).contentType(data.getFirstRequestContentType()).build();
+                    .fuzzedField(fuzzedField).queryParams(data.getQueryParams()).contentType(data.getFirstRequestContentType())
+                    .pathParamsPayload(data.getPathParamsPayload()).build();
             ResponseCodeFamily expectedResponseCodeBasedOnConstraints = this.getExpectedResponseCodeBasedOnConstraints(isFuzzedValueMatchingPattern, fuzzingConstraints);
 
             testCaseListener.addExpectedResult(logger, "Should return [{}]", expectedResponseCodeBasedOnConstraints.asString());
 
             CatsResponse response = serviceCaller.call(serviceData);
 
-            testCaseListener.reportResult(logger, data, response, expectedResponseCodeBasedOnConstraints);
+            testCaseListener.reportResult(logger, data, response, expectedResponseCodeBasedOnConstraints, this.shouldMatchResponseSchema(data), this.shouldMatchContentType(data));
         } else {
             logger.debug("Fuzzing not possible!");
             FuzzingStrategy strategy = this.createSkipStrategy(fuzzingStrategy);
             testCaseListener.skipTest(logger, (String) strategy.process(""));
+            logger.info("{} " + strategy.getData().toString(), fuzzedField);
         }
     }
 
     private FuzzingStrategy createSkipStrategy(FuzzingStrategy fuzzingStrategy) {
-        return fuzzingStrategy.isSkip() ? fuzzingStrategy : FuzzingStrategy.skip().withData("Field could not be fuzzed. Possible reasons: field is not a primitive, is a discriminator or is not matching the Fuzzer schemas");
+        return fuzzingStrategy.isSkip() ? fuzzingStrategy : FuzzingStrategy.skip().withData(
+                "field could not be fuzzed. Possible reasons: field is not a primitive, is a discriminator, is passed as refData or is not matching the Fuzzer schemas");
     }
 
     /**
@@ -159,13 +185,16 @@ public abstract class BaseFieldsFuzzer implements Fuzzer {
      * @return true if the fuzzed value matches the pattern, false otherwise
      */
     private boolean isFuzzedValueMatchingPattern(Object fieldValue, FuzzingData data, String fuzzedField) {
-        Schema<?> fieldSchema = data.getRequestPropertyTypes().get(fuzzedField);
-        if (fieldSchema.getPattern() == null || fieldSchema instanceof ByteArraySchema) {
-            return true;
-        }
-        Pattern pattern = Pattern.compile(fieldSchema.getPattern());
+        if (this.shouldCheckForFuzzedValueMatchingPattern()) {
+            Schema<?> fieldSchema = data.getRequestPropertyTypes().get(fuzzedField);
+            if (fieldSchema.getPattern() == null || CatsModelUtils.isByteArraySchema(fieldSchema)) {
+                return true;
+            }
+            Pattern pattern = Pattern.compile(fieldSchema.getPattern());
 
-        return fieldValue == null || pattern.matcher(this.sanitizeString(fieldValue)).matches();
+            return fieldValue == null || pattern.matcher(this.sanitizeString(fieldValue)).matches();
+        }
+        return true;
     }
 
     /**
@@ -188,6 +217,41 @@ public abstract class BaseFieldsFuzzer implements Fuzzer {
         return mandatoryFieldsFuzzed ? this.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed() : this.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed();
     }
 
+    /**
+     * When sending large or malformed values the payload might not reach the application layer, but rather be rejected by the HTTP server.
+     * In those cases response content-type is typically html which will most likely won't match the OpenAPI spec.
+     * <p>
+     * Override this to return false to avoid content type checking.
+     *
+     * @param data the current fuzzing data context
+     * @return true if the fuzzer should check if the response content type matches the contract, false otherwise
+     */
+    protected boolean shouldMatchContentType(FuzzingData data) {
+        return true;
+    }
+
+    /**
+     * When sending large or malformed values the payload might not reach the application layer, but rather be rejected by the HTTP server.
+     * In those cases response is typically html which will most likely won't match the OpenAPI spec.
+     * <p>
+     * Override this to return false to avoid response schema checking.
+     *
+     * @param data the current fuzzing data context
+     * @return true if the fuzzer should check if the response matches the schema from the contract, false otherwise
+     */
+    protected boolean shouldMatchResponseSchema(FuzzingData data) {
+        return true;
+    }
+
+    /**
+     * Sometimes you might not want to check if the fuzzed value is still matching field's pattern.
+     * Override this to return false to avoid checking.
+     *
+     * @return true if the fuzzer should check if the fuzzed values matches field's pattern, false otherwise
+     */
+    protected boolean shouldCheckForFuzzedValueMatchingPattern() {
+        return true;
+    }
 
     /**
      * A simple description of the current data being sent to the service. This will be used as a description in the final report.

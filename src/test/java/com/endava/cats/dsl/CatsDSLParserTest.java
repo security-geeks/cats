@@ -62,7 +62,7 @@ class CatsDSLParserTest {
 
     @Test
     void shouldSubstring() {
-        String expression = "name.substring(1,3)";
+        String expression = "${name}.substring(1,3)";
         String actual = CatsDSLParser.parseAndGetResult(expression, Map.of("name", "john"));
         Assertions.assertThat(actual).isEqualTo("oh");
     }
@@ -77,5 +77,12 @@ class CatsDSLParserTest {
     void shouldGetNotFoundSystemVariable() {
         String actual = CatsDSLParser.parseAndGetResult("$$cats", null);
         Assertions.assertThat(actual).isEqualTo("not_found_$$cats");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"2023-02-02,2023-02-02", "${2023-02-02},2019"})
+    void shouldParseDateStringAsDate(String input, String parsedOutput) {
+        String actual = CatsDSLParser.parseAndGetResult(input, Map.of("name", "john"));
+        Assertions.assertThat(actual).isEqualTo(parsedOutput);
     }
 }

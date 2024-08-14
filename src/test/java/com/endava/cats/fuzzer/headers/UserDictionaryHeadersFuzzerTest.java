@@ -1,6 +1,6 @@
 package com.endava.cats.fuzzer.headers;
 
-import com.endava.cats.args.IgnoreArguments;
+import com.endava.cats.args.FilterArguments;
 import com.endava.cats.args.MatchArguments;
 import com.endava.cats.args.UserArguments;
 import com.endava.cats.fuzzer.executor.HeadersIteratorExecutor;
@@ -39,7 +39,7 @@ class UserDictionaryHeadersFuzzerTest {
         matchArguments = Mockito.mock(MatchArguments.class);
         prettyLogger = Mockito.mock(PrettyLogger.class);
         ReflectionTestUtils.setField(testCaseListener, "testCaseExporter", Mockito.mock(TestCaseExporter.class));
-        HeadersIteratorExecutor headersIteratorExecutor = new HeadersIteratorExecutor(serviceCaller, testCaseListener, matchArguments, Mockito.mock(IgnoreArguments.class));
+        HeadersIteratorExecutor headersIteratorExecutor = new HeadersIteratorExecutor(serviceCaller, testCaseListener, matchArguments, Mockito.mock(FilterArguments.class));
         userDictionaryHeadersFuzzer = new UserDictionaryHeadersFuzzer(headersIteratorExecutor, matchArguments, userArguments);
         ReflectionTestUtils.setField(userDictionaryHeadersFuzzer, "logger", prettyLogger);
     }
@@ -81,7 +81,7 @@ class UserDictionaryHeadersFuzzerTest {
         Mockito.when(data.getHeaders()).thenReturn(Set.of(CatsHeader.builder().name("header1").value("value").build()));
         userDictionaryHeadersFuzzer.fuzz(data);
 
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResultError(Mockito.any(), Mockito.any(), Mockito.anyString(), Mockito.eq("Service call completed. Please check response details"), Mockito.any());
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResultError(Mockito.any(), Mockito.any(), Mockito.eq("Response matches arguments"), Mockito.anyString(), Mockito.any());
     }
 
     @Test

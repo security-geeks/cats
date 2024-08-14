@@ -1,9 +1,9 @@
 package com.endava.cats.fuzzer.fields;
 
-import com.endava.cats.args.IgnoreArguments;
+import com.endava.cats.args.FilterArguments;
 import com.endava.cats.args.ProcessingArguments;
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
@@ -30,7 +30,7 @@ class RemoveFieldsFuzzerTest {
     private ServiceCaller serviceCaller;
     @InjectSpy
     private TestCaseListener testCaseListener;
-    private IgnoreArguments ignoreArguments;
+    private FilterArguments filterArguments;
     private ProcessingArguments processingArguments;
     private RemoveFieldsFuzzer removeFieldsFuzzer;
 
@@ -39,19 +39,19 @@ class RemoveFieldsFuzzerTest {
 
     @BeforeEach
     void setup() {
-        ignoreArguments = Mockito.mock(IgnoreArguments.class);
+        filterArguments = Mockito.mock(FilterArguments.class);
         processingArguments = Mockito.mock(ProcessingArguments.class);
         serviceCaller = Mockito.mock(ServiceCaller.class);
-        removeFieldsFuzzer = new RemoveFieldsFuzzer(serviceCaller, testCaseListener, ignoreArguments, processingArguments);
+        removeFieldsFuzzer = new RemoveFieldsFuzzer(serviceCaller, testCaseListener, filterArguments, processingArguments);
         ReflectionTestUtils.setField(testCaseListener, "testCaseExporter", Mockito.mock(TestCaseExporter.class));
     }
 
     @Test
     void shouldSkipFuzzerIfSkippedTests() {
-        FuzzingData data = Mockito.mock(FuzzingData.class);
+        data = Mockito.mock(FuzzingData.class);
         Mockito.when(processingArguments.getFieldsFuzzingStrategy()).thenReturn(ProcessingArguments.SetFuzzingStrategy.ONEBYONE);
         Mockito.when(data.getAllFields(Mockito.any(), Mockito.anyInt())).thenReturn(Collections.singleton(Collections.singleton("id")));
-        Mockito.when(ignoreArguments.getSkipFields()).thenReturn(Collections.singletonList("id"));
+        Mockito.when(filterArguments.getSkipFields()).thenReturn(Collections.singletonList("id"));
         removeFieldsFuzzer.fuzz(data);
 
         Mockito.verifyNoInteractions(testCaseListener);
@@ -62,7 +62,7 @@ class RemoveFieldsFuzzerTest {
         setup("{\"field\":\"oldValue\"}");
         removeFieldsFuzzer.fuzz(data);
 
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamily.FOURXX));
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX));
         Mockito.verify(testCaseListener, Mockito.times(2)).skipTest(Mockito.any(), Mockito.eq("Field is from a different ANY_OF or ONE_OF payload"));
     }
 
@@ -71,7 +71,7 @@ class RemoveFieldsFuzzerTest {
         setup("[{\"field\":\"oldValue\"}, {\"field\":\"newValue\"}]");
         removeFieldsFuzzer.fuzz(data);
 
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamily.FOURXX));
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX));
         Mockito.verify(testCaseListener, Mockito.times(2)).skipTest(Mockito.any(), Mockito.eq("Field is from a different ANY_OF or ONE_OF payload"));
     }
 

@@ -1,5 +1,6 @@
 package com.endava.cats.args;
 
+import com.endava.cats.exception.CatsException;
 import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -13,6 +14,18 @@ import java.util.Map;
 
 @QuarkusTest
 class FilesArgumentsTest {
+
+    @Test
+    void shouldLoadFuzzConfig() throws IOException {
+        FilesArguments filesArguments = new FilesArguments();
+        ReflectionTestUtils.setField(filesArguments, "fuzzersConfig", new File("src/test/resources/fuzzConfig.properties"));
+        filesArguments.loadFuzzConfigProperties();
+        String existingProperty = filesArguments.getFuzzConfigProperties().getProperty("DummyAcceptHeaders.expectedResponseCode");
+        String nonExistingProperty = filesArguments.getFuzzConfigProperties().getProperty("DummyAcceptHeaders.expectedScenario");
+
+        org.assertj.core.api.Assertions.assertThat(existingProperty).isEqualTo("403");
+        org.assertj.core.api.Assertions.assertThat(nonExistingProperty).isNull();
+    }
 
     @Test
     void shouldReturnSameUrlWhenUrlParamsEmpty() {
@@ -83,6 +96,14 @@ class FilesArgumentsTest {
     }
 
     @Test
+    void shouldThrowExceptionAsInvalidFormatForHeaders() {
+        FilesArguments filesArguments = new FilesArguments();
+        ReflectionTestUtils.setField(filesArguments, "headersFile", new File("src/test/resources/wrong_headers.yml"));
+        org.assertj.core.api.Assertions.assertThatThrownBy(filesArguments::loadHeaders).isInstanceOf(CatsException.class)
+                .hasMessage("File format is wrong for Headers. Make sure you supply a valid yaml file!");
+    }
+
+    @Test
     void shouldLoadPathAndAllQueryParamsForPath() throws Exception {
         FilesArguments filesArguments = new FilesArguments();
         ReflectionTestUtils.setField(filesArguments, "queryFile", new File("src/test/resources/queryParams.yml"));
@@ -124,5 +145,61 @@ class FilesArgumentsTest {
 
         org.assertj.core.api.Assertions.assertThat(yaml.get("all")).isNotNull();
         org.assertj.core.api.Assertions.assertThat(yaml.get("all").get("Authorization")).isNotNull();
+    }
+
+    @Test
+    void shouldLoadRefData() throws Exception {
+        FilesArguments filesArguments = new FilesArguments();
+        filesArguments.setRefDataFile(new File("src/test/resources/refFields_with_all.yml"));
+        filesArguments.setRefDataArguments(Map.of("argRefData", "argValue", "anotherArgRefData", "anotherValue"));
+        filesArguments.loadRefData();
+        Map<String, Object> refDataForPets = filesArguments.getRefData("/pets");
+        org.assertj.core.api.Assertions.assertThat(refDataForPets).containsOnlyKeys("argRefData", "anotherArgRefData", "allField", "anotherAllField", "field", "name");
+    }
+
+    @Test
+    void shouldLoadQueryParams() throws Exception {
+        FilesArguments filesArguments = new FilesArguments();
+        filesArguments.setQueryFile(new File("src/test/resources/refFields_with_all.yml"));
+        filesArguments.setQueryParamsArguments(Map.of("argRefData", "argValue", "anotherArgRefData", "anotherValue"));
+        filesArguments.loadQueryParams();
+        Map<String, Object> queryParamsForPets = filesArguments.getAdditionalQueryParamsForPath("/pets");
+        org.assertj.core.api.Assertions.assertThat(queryParamsForPets).containsOnlyKeys("argRefData", "anotherArgRefData", "allField", "anotherAllField", "field", "name");
+    }
+
+    @Test
+    void shouldLoadUrlParams() {
+        FilesArguments filesArguments = new FilesArguments();
+        filesArguments.setParams(List.of("param1:value1", "param2:value2"));
+        filesArguments.setUrlParamsArguments(Map.of("param3", "value3", "param4", "value4"));
+        filesArguments.loadURLParams();
+        List<String> urlParams = filesArguments.getUrlParamsList();
+        org.assertj.core.api.Assertions.assertThat(urlParams).containsOnly("param1:value1", "param2:value2", "param3:value3", "param4:value4");
+    }
+
+    @Test
+    void shouldLoadUrlParamsFromArgsOnly() {
+        FilesArguments filesArguments = new FilesArguments();
+        filesArguments.setUrlParamsArguments(Map.of("param3", "value3", "param4", "value4"));
+        filesArguments.loadURLParams();
+        List<String> urlParams = filesArguments.getUrlParamsList();
+        org.assertj.core.api.Assertions.assertThat(urlParams).containsOnly("param3:value3", "param4:value4");
+    }
+
+    @Test
+    void shouldReturnEmptyUrlParamValueWhenNotSupplied() {
+        FilesArguments filesArguments = new FilesArguments();
+        filesArguments.loadURLParams();
+        String urlParamValue = filesArguments.getUrlParam("myParam");
+        org.assertj.core.api.Assertions.assertThat(urlParamValue).isEmpty();
+    }
+
+    @Test
+    void shouldReturnUrlParamValue() {
+        FilesArguments filesArguments = new FilesArguments();
+        filesArguments.setUrlParamsArguments(Map.of("param3", "value3", "param4", "value4"));
+        filesArguments.loadURLParams();
+        String urlParamValue = filesArguments.getUrlParam("param3");
+        org.assertj.core.api.Assertions.assertThat(urlParamValue).isEqualTo("value3");
     }
 }

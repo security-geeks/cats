@@ -4,7 +4,7 @@ import com.endava.cats.fuzzer.api.Fuzzer;
 import com.endava.cats.fuzzer.executor.FieldsIteratorExecutor;
 import com.endava.cats.fuzzer.executor.FieldsIteratorExecutorContext;
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.strategy.FuzzingStrategy;
 import com.endava.cats.util.ConsoleUtils;
@@ -17,9 +17,21 @@ import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
+/**
+ * Base class for fuzzers that replace valid field values with fuzzed values.
+ */
 public abstract class BaseReplaceFieldsFuzzer implements Fuzzer {
+    /**
+     * Logger used across all sub-classes.
+     */
     protected final PrettyLogger logger = PrettyLoggerFactory.getLogger(getClass());
     private final FieldsIteratorExecutor catsExecutor;
+
+    /**
+     * Constructor for initializing common dependencies for fuzzing fields.
+     *
+     * @param ce the executor
+     */
     protected BaseReplaceFieldsFuzzer(FieldsIteratorExecutor ce) {
         this.catsExecutor = ce;
     }
@@ -31,7 +43,7 @@ public abstract class BaseReplaceFieldsFuzzer implements Fuzzer {
                 FieldsIteratorExecutorContext.builder()
                         .scenario("Replace %s fields with %s values. ".formatted(context.replaceWhat, context.replaceWith))
                         .fuzzingData(data).fuzzingStrategy(FuzzingStrategy.replace())
-                        .expectedResponseCode(ResponseCodeFamily.FOURXX)
+                        .expectedResponseCode(ResponseCodeFamilyPredefined.FOURXX)
                         .skipMessage(context.skipMessage)
                         .fieldFilter(context.fieldFilter)
                         .fuzzValueProducer(context.fuzzValueProducer)
@@ -58,14 +70,23 @@ public abstract class BaseReplaceFieldsFuzzer implements Fuzzer {
         return List.of(HttpMethod.HEAD, HttpMethod.GET, HttpMethod.DELETE);
     }
 
+    /**
+     * Context for subclasses to provide.
+     */
     @Builder
     public static class BaseReplaceFieldsContext {
         private final String replaceWhat;
         private final String replaceWith;
         private final String skipMessage;
         private final Predicate<String> fieldFilter;
-        private final BiFunction<Schema<?>, String, List<String>> fuzzValueProducer;
+        private final BiFunction<Schema<?>, String, List<Object>> fuzzValueProducer;
     }
 
+    /**
+     * Override to provide the actual context for the fuzzer to run.
+     *
+     * @param data the fuzzing data object
+     * @return context for the fuzzer to run
+     */
     public abstract BaseReplaceFieldsContext getContext(FuzzingData data);
 }

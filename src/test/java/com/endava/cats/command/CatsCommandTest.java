@@ -4,12 +4,13 @@ import com.endava.cats.args.ApiArguments;
 import com.endava.cats.args.CheckArguments;
 import com.endava.cats.args.FilterArguments;
 import com.endava.cats.args.ReportingArguments;
+import com.endava.cats.context.CatsGlobalContext;
 import com.endava.cats.factory.FuzzingDataFactory;
 import com.endava.cats.fuzzer.contract.PathTagsLinterFuzzer;
-import com.endava.cats.fuzzer.executor.SimpleExecutor;
-import com.endava.cats.fuzzer.http.HappyPathFuzzer;
+import com.endava.cats.fuzzer.http.CheckDeletedResourcesNotAvailableFuzzer;
 import com.endava.cats.http.HttpMethod;
 import com.endava.cats.report.ExecutionStatisticsListener;
+import com.endava.cats.report.TestCaseExporter;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.util.VersionChecker;
 import io.quarkus.test.junit.QuarkusTest;
@@ -18,8 +19,6 @@ import jakarta.inject.Inject;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 import picocli.CommandLine;
@@ -51,6 +50,9 @@ class CatsCommandTest {
         filterArguments = Mockito.mock(FilterArguments.class);
         ReflectionTestUtils.setField(catsMain, "filterArguments", filterArguments);
         Mockito.when(filterArguments.getHttpMethods()).thenReturn(HttpMethod.restMethods());
+        ReflectionTestUtils.setField(reportingArguments, "verbosity", ReportingArguments.Verbosity.DETAILED);
+        ReflectionTestUtils.setField(catsMain, "spec", Mockito.mock(CommandLine.Model.CommandSpec.class));
+        ReflectionTestUtils.setField(testCaseListener, "testCaseExporter", Mockito.mock(TestCaseExporter.class));
     }
 
     @Test
@@ -99,7 +101,7 @@ class CatsCommandTest {
         Mockito.verify(spyMain).startFuzzing(Mockito.any());
         Mockito.verify(testCaseListener, Mockito.times(1)).startSession();
         Mockito.verify(testCaseListener, Mockito.times(1)).endSession();
-        Mockito.verify(testCaseListener, Mockito.times(0)).afterFuzz();
+        Mockito.verify(testCaseListener, Mockito.times(0)).afterFuzz(Mockito.any());
         ReflectionTestUtils.setField(apiArguments, "contract", "empty");
         ReflectionTestUtils.setField(apiArguments, "server", "empty");
     }
@@ -112,26 +114,7 @@ class CatsCommandTest {
         catsMain.run();
         Mockito.verify(testCaseListener, Mockito.times(1)).startSession();
         Mockito.verify(testCaseListener, Mockito.times(0)).endSession();
-        Mockito.verify(testCaseListener, Mockito.times(0)).afterFuzz();
-    }
-
-    @ParameterizedTest
-    @CsvSource({"/pets/*,1", "*-rec,2", "*types*,4"})
-    void shouldRunPathsWhenEndingWithWildcard(String path, int invocations) {
-        ReflectionTestUtils.setField(apiArguments, "contract", "src/test/resources/petstore.yml");
-        ReflectionTestUtils.setField(apiArguments, "server", "http://localhost:8080");
-        Mockito.when(filterArguments.getFirstPhaseFuzzersForPath()).thenReturn(List.of("HappyPathFuzzer"));
-        Mockito.when(filterArguments.getPaths()).thenReturn(List.of(path));
-        Mockito.when(filterArguments.getAllRegisteredFuzzers()).thenReturn(List.of(new HappyPathFuzzer(Mockito.mock(SimpleExecutor.class))));
-
-        CatsCommand spyMain = Mockito.spy(catsMain);
-        spyMain.run();
-
-        Mockito.verify(testCaseListener, Mockito.times(invocations)).afterFuzz();
-        Mockito.verify(testCaseListener, Mockito.times(invocations)).beforeFuzz(HappyPathFuzzer.class);
-
-        ReflectionTestUtils.setField(apiArguments, "contract", "empty");
-        ReflectionTestUtils.setField(apiArguments, "server", "empty");
+        Mockito.verify(testCaseListener, Mockito.times(0)).afterFuzz(Mockito.any());
     }
 
     @Test
@@ -144,18 +127,21 @@ class CatsCommandTest {
         ReflectionTestUtils.setField(reportingArguments, "debug", true);
         Mockito.when(filterArguments.getFirstPhaseFuzzersForPath()).thenReturn(List.of("PathTagsLinterFuzzer"));
         Mockito.when(filterArguments.getSuppliedFuzzers()).thenReturn(List.of("FunctionalFuzzer"));
-        Mockito.when(filterArguments.getAllRegisteredFuzzers()).thenReturn(List.of(new PathTagsLinterFuzzer(testCaseListener)));
+        Mockito.when(filterArguments.isHttpMethodSupplied(Mockito.any())).thenReturn(true);
+        Mockito.when(filterArguments.filterOutFuzzersNotMatchingHttpMethods(Mockito.any())).thenReturn(List.of(new PathTagsLinterFuzzer(testCaseListener)));
+        Mockito.when(filterArguments.getSecondPhaseFuzzers()).thenReturn(List.of(Mockito.mock(CheckDeletedResourcesNotAvailableFuzzer.class)));
         Mockito.when(executionStatisticsListener.areManyIoErrors()).thenReturn(true);
         Mockito.when(executionStatisticsListener.getIoErrors()).thenReturn(10);
 
+        Mockito.when(filterArguments.getPathsToRun(Mockito.any())).thenReturn(List.of("/pet-types", "/pet-types-rec", "/pets", "/pets-batch", "/pets/{id}"));
         CatsCommand spyMain = Mockito.spy(catsMain);
         spyMain.run();
         Mockito.verify(spyMain).createOpenAPI();
         Mockito.verify(spyMain).startFuzzing(Mockito.any());
         Mockito.verify(testCaseListener, Mockito.times(1)).startSession();
         Mockito.verify(testCaseListener, Mockito.times(1)).endSession();
-        Mockito.verify(testCaseListener, Mockito.times(8)).afterFuzz();
-        Mockito.verify(testCaseListener, Mockito.times(8)).beforeFuzz(PathTagsLinterFuzzer.class);
+        Mockito.verify(testCaseListener, Mockito.times(20)).afterFuzz(Mockito.any());
+        Mockito.verify(testCaseListener, Mockito.times(10)).beforeFuzz(Mockito.eq(PathTagsLinterFuzzer.class), Mockito.any(), Mockito.any());
 
         ReflectionTestUtils.setField(apiArguments, "contract", "empty");
         ReflectionTestUtils.setField(apiArguments, "server", "empty");
@@ -168,19 +154,26 @@ class CatsCommandTest {
         ReflectionTestUtils.setField(checkArguments, "includeEmojis", true);
         ReflectionTestUtils.setField(checkArguments, "includeControlChars", true);
         ReflectionTestUtils.setField(checkArguments, "includeWhitespaces", true);
+        ReflectionTestUtils.setField(reportingArguments, "verbosity", ReportingArguments.Verbosity.SUMMARY);
+
         CatsCommand spyMain = Mockito.spy(catsMain);
         Mockito.when(filterArguments.getFirstPhaseFuzzersForPath()).thenReturn(List.of("PathTagsLinterFuzzer"));
-        Mockito.when(filterArguments.getAllRegisteredFuzzers()).thenReturn(List.of(new PathTagsLinterFuzzer(testCaseListener)));
+        Mockito.when(filterArguments.isHttpMethodSupplied(Mockito.any())).thenReturn(true);
+        Mockito.when(filterArguments.filterOutFuzzersNotMatchingHttpMethods(Mockito.any())).thenReturn(List.of(new PathTagsLinterFuzzer(testCaseListener)));
+        Mockito.when(filterArguments.getSecondPhaseFuzzers()).thenReturn(List.of(new CheckDeletedResourcesNotAvailableFuzzer(null, Mockito.mock(CatsGlobalContext.class), null)));
+        Mockito.when(filterArguments.getPathsToRun(Mockito.any())).thenReturn(
+                List.of("/pet", "/pets", "/pet/findByStatus", "/pet/findByTags", "/pet/{petId}", "/pet/{petId}/uploadImage", "/store/inventory"));
         Mockito.when(executionStatisticsListener.areManyAuthErrors()).thenReturn(true);
-        Mockito.when(executionStatisticsListener.getAuthErrors()).thenReturn(10);
+        Mockito.when(executionStatisticsListener.getAuthErrors()).thenReturn(9);
 
         spyMain.run();
         Mockito.verify(spyMain).createOpenAPI();
         Mockito.verify(spyMain).startFuzzing(Mockito.any());
         Mockito.verify(fuzzingDataFactory).fromPathItem(Mockito.eq("/pet"), Mockito.any(), Mockito.any());
         Mockito.verify(fuzzingDataFactory, Mockito.times(0)).fromPathItem(Mockito.eq("/petss"), Mockito.any(), Mockito.any());
-        Mockito.verify(testCaseListener, Mockito.times(20)).afterFuzz();
-        Mockito.verify(testCaseListener, Mockito.times(20)).beforeFuzz(PathTagsLinterFuzzer.class);
+        Mockito.verify(testCaseListener, Mockito.times(13)).afterFuzz(Mockito.any());
+        Mockito.verify(testCaseListener, Mockito.times(9)).beforeFuzz(Mockito.eq(PathTagsLinterFuzzer.class), Mockito.anyString(), Mockito.any());
+        Mockito.verify(testCaseListener, Mockito.times(4)).beforeFuzz(Mockito.eq(CheckDeletedResourcesNotAvailableFuzzer.class), Mockito.any(), Mockito.any());
 
         ReflectionTestUtils.setField(apiArguments, "contract", "empty");
         ReflectionTestUtils.setField(apiArguments, "server", "empty");
@@ -202,5 +195,14 @@ class CatsCommandTest {
 
         ReflectionTestUtils.setField(apiArguments, "server", "http://localhost:8080");
         Assertions.assertThatThrownBy(() -> catsMain.run()).isInstanceOf(CommandLine.ParameterException.class).hasMessage("Missing required option --contract=<contract>");
+    }
+
+    @Test
+    void shouldThrowExceptionWhenServerNotValid() {
+        CommandLine.Model.CommandSpec spec = Mockito.mock(CommandLine.Model.CommandSpec.class);
+        Mockito.when(spec.commandLine()).thenReturn(Mockito.mock(CommandLine.class));
+        ReflectionTestUtils.setField(catsMain, "spec", spec);
+        ReflectionTestUtils.setField(apiArguments, "server", "server");
+        Assertions.assertThatThrownBy(() -> catsMain.run()).isInstanceOf(CommandLine.ParameterException.class);
     }
 }

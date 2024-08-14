@@ -5,24 +5,31 @@ import com.endava.cats.fuzzer.executor.SimpleExecutor;
 import com.endava.cats.fuzzer.headers.base.BaseSecurityChecksHeadersFuzzer;
 import com.endava.cats.generator.Cloner;
 import com.endava.cats.http.HttpMethod;
+import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
+import com.endava.cats.util.JsonUtils;
 import com.endava.cats.model.CatsHeader;
 import com.endava.cats.model.FuzzingData;
-import com.endava.cats.json.JsonUtils;
 import com.google.common.net.HttpHeaders;
-
 import jakarta.inject.Singleton;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
 /**
- * dummy content type
+ * Sends dummy Content-Type headers.
  */
 @Singleton
 @HeaderFuzzer
 public class DummyContentTypeHeadersFuzzer extends BaseSecurityChecksHeadersFuzzer {
 
+    /**
+     * Creates a new instance.
+     *
+     * @param simpleExecutor executor used to run the fuzz logic
+     */
     public DummyContentTypeHeadersFuzzer(SimpleExecutor simpleExecutor) {
         super(simpleExecutor);
     }
@@ -40,6 +47,11 @@ public class DummyContentTypeHeadersFuzzer extends BaseSecurityChecksHeadersFuzz
     @Override
     public String targetHeaderName() {
         return HttpHeaders.CONTENT_TYPE;
+    }
+
+    @Override
+    public ResponseCodeFamily getResponseCodeFamily() {
+        return ResponseCodeFamilyPredefined.FOURXX_MT;
     }
 
     @Override

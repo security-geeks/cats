@@ -5,25 +5,30 @@ import com.endava.cats.generator.format.api.OpenAPIFormat;
 import com.endava.cats.generator.format.api.PropertySanitizer;
 import com.endava.cats.generator.format.api.ValidDataFormatGenerator;
 import io.swagger.v3.oas.models.media.Schema;
+import jakarta.inject.Singleton;
 import org.apache.commons.lang3.RandomStringUtils;
 
-import jakarta.inject.Singleton;
 import java.util.List;
+import java.util.Locale;
 
+/**
+ * A generator class implementing various interfaces for generating valid and invalid email data formats.
+ * It also implements the OpenAPIFormat interface.
+ */
 @Singleton
 public class EmailGenerator implements ValidDataFormatGenerator, InvalidDataFormatGenerator, OpenAPIFormat {
 
-    public static final String EMAIL = "email";
+    private static final String EMAIL = "email";
 
     @Override
     public Object generate(Schema<?> schema) {
-        return RandomStringUtils.randomAlphabetic(5) + "cool.cats@cats.io";
+        return RandomStringUtils.randomAlphabetic(5).toLowerCase(Locale.ROOT) + "cool.cats@cats.io";
     }
 
     @Override
     public boolean appliesTo(String format, String propertyName) {
-        return propertyName.toLowerCase().endsWith(EMAIL) ||
-                PropertySanitizer.sanitize(propertyName).toLowerCase().endsWith("emailaddress") ||
+        return propertyName.toLowerCase(Locale.ROOT).endsWith(EMAIL) ||
+                PropertySanitizer.sanitize(propertyName).endsWith("emailaddress") ||
                 EMAIL.equalsIgnoreCase(format);
     }
 
@@ -38,7 +43,7 @@ public class EmailGenerator implements ValidDataFormatGenerator, InvalidDataForm
     }
 
     @Override
-    public List<String> marchingFormats() {
+    public List<String> matchingFormats() {
         return List.of(EMAIL);
     }
 }

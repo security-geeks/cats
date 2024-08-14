@@ -1,13 +1,12 @@
 package com.endava.cats.fuzzer.headers;
 
 import com.endava.cats.fuzzer.executor.SimpleExecutor;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.CatsHeader;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseExporter;
 import com.endava.cats.report.TestCaseListener;
-import io.quarkus.test.Mock;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import io.swagger.v3.oas.models.media.StringSchema;
@@ -72,10 +71,15 @@ class UnsupportedContentTypesHeadersFuzzerTest {
         ReflectionTestUtils.setField(data, "processedPayload", "{\"id\": 1}");
 
         Mockito.doNothing().when(testCaseListener).reportResult(Mockito.any(),
-                Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamily.FOURXX_MT));
+                Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX_MT), Mockito.anyBoolean(), Mockito.anyBoolean());
         unsupportedContentTypeHeadersFuzzer.fuzz(data);
 
         Mockito.verify(testCaseListener, Mockito.times(29)).reportResult(Mockito.any(),
-                Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamily.FOURXX_MT));
+                Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX_MT), Mockito.anyBoolean(), Mockito.eq(true));
+    }
+
+    @Test
+    void shouldReturn4XXMTResponseCode() {
+        Assertions.assertThat(unsupportedContentTypeHeadersFuzzer.getResponseCodeFamily()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX_MT);
     }
 }

@@ -61,7 +61,6 @@
             <p>{{request.timestamp}}</p>
         </div>
 
-
         <div class="component title">
             <p>Scenario</p>
         </div>
@@ -88,7 +87,16 @@
                 {{resultDetails}}
             </p>
         </div>
-
+        {{#hasResultSwitched}}
+            <div class="component title result-warn">
+                <p>Warning</p>
+            </div>
+            <div class="component text result-warn">
+                <p>
+                    {{resultIgnoreDetails}}
+                </p>
+            </div>
+        {{/hasResultSwitched}}
         <div class="component title">
             <p>Contract Path</p>
         </div>
@@ -118,25 +126,26 @@
         </div>
         <div class="clearfix"></div>
     </div>
+    {{#hasRequestDetails}}
     {{#js}}
     <div>
         <div class="tabs">
             <div class="tabs-and-title">
                 <div class="component section-title">Request Details</div>
                 <div class="all-tabs">
-                    <div class="component tab active" onclick="showCode(1)">Headers</div>
-                    <div class="component tab" onclick="showCode(2)">Payload</div>
+                    <div class="component tab active" onclick="showCode(1)">Payload</div>
+                    <div class="component tab" onclick="showCode(2)">Headers</div>
                     <div class="component tab" onclick="showCode(3)">cURL</div>
                 </div>
             </div>
             <button class="copy-button" onclick="copyTabs()">Copy code</button>
         </div>
-        <div class="code-area active" id="code-1">
-            <pre><code>{{headers}}</code></pre>
+        <div class="code-area" id="code-1">
+            <pre><code>{{requestJson}}</code></pre>
         </div>
 
-        <div class="code-area" id="code-2">
-            <pre><code>{{requestJson}}</code></pre>
+        <div class="code-area active" id="code-2">
+            <pre><code>{{headers}}</code></pre>
         </div>
 
         <div class="code-area" id="code-3">
@@ -151,23 +160,23 @@
             <div class="tabs-and-title">
                 <div class="component section-title">Request Details</div>
                 <div class="all-tabs">
-                    <div class="component tab active">Headers</div>
-                </div>
-            </div>
-        </div>
-        <div class="code-area active">
-            <pre><code>{{headers}}</code></pre>
-        </div>
-        <div class="tabs">
-            <div class="tabs-and-title">
-                <div class="component section-title">Request Details</div>
-                <div class="all-tabs">
                     <div class="component tab active">Payload</div>
                 </div>
             </div>
         </div>
         <div class="code-area active">
             <pre><code>{{requestJson}}</code></pre>
+        </div>
+        <div class="tabs">
+            <div class="tabs-and-title">
+                <div class="component section-title">Request Details</div>
+                <div class="all-tabs">
+                    <div class="component tab active">Headers</div>
+                </div>
+            </div>
+        </div>
+        <div class="code-area active">
+            <pre><code>{{headers}}</code></pre>
         </div>
         <div class="tabs">
             <div class="tabs-and-title">
@@ -206,6 +215,7 @@
         </div>
     </div>
 </div>
+{{/hasRequestDetails}}
 {{/TEST_CASE}}
 {{#JS}}
 <script src="script.js"></script>

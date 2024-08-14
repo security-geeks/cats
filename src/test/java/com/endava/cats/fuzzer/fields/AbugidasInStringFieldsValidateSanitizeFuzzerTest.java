@@ -1,12 +1,11 @@
 package com.endava.cats.fuzzer.fields;
 
 import com.endava.cats.args.FilesArguments;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.FuzzingData;
-import com.endava.cats.strategy.FuzzingStrategy;
 import com.endava.cats.report.TestCaseListener;
-import com.endava.cats.util.CatsUtil;
+import com.endava.cats.strategy.FuzzingStrategy;
 import io.quarkus.test.junit.QuarkusTest;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.media.StringSchema;
@@ -20,7 +19,6 @@ import java.util.Map;
 
 @QuarkusTest
 class AbugidasInStringFieldsValidateSanitizeFuzzerTest {
-    private final CatsUtil catsUtil = new CatsUtil();
     private AbugidasInStringFieldsValidateSanitizeFuzzer abugidasInStringFieldsValidateSanitizeFuzzer;
 
     @BeforeEach
@@ -28,7 +26,7 @@ class AbugidasInStringFieldsValidateSanitizeFuzzerTest {
         ServiceCaller serviceCaller = Mockito.mock(ServiceCaller.class);
         TestCaseListener testCaseListener = Mockito.mock(TestCaseListener.class);
         FilesArguments filesArguments = Mockito.mock(FilesArguments.class);
-        abugidasInStringFieldsValidateSanitizeFuzzer = new AbugidasInStringFieldsValidateSanitizeFuzzer(serviceCaller, testCaseListener, catsUtil, filesArguments);
+        abugidasInStringFieldsValidateSanitizeFuzzer = new AbugidasInStringFieldsValidateSanitizeFuzzer(serviceCaller, testCaseListener, filesArguments);
         Mockito.when(testCaseListener.isFieldNotADiscriminator(Mockito.anyString())).thenReturn(true);
         Mockito.when(testCaseListener.isFieldNotADiscriminator("pet#type")).thenReturn(false);
     }
@@ -42,9 +40,9 @@ class AbugidasInStringFieldsValidateSanitizeFuzzerTest {
         FuzzingStrategy fuzzingStrategy = abugidasInStringFieldsValidateSanitizeFuzzer.getFieldFuzzingStrategy(data, "field").get(0);
 
         Assertions.assertThat(fuzzingStrategy.getData().toString()).contains("్ఞ\u200Cా");
-        Assertions.assertThat(abugidasInStringFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern()).isEqualTo(ResponseCodeFamily.FOURXX);
-        Assertions.assertThat(abugidasInStringFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualTo(ResponseCodeFamily.FOURXX);
-        Assertions.assertThat(abugidasInStringFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualTo(ResponseCodeFamily.FOURXX);
+        Assertions.assertThat(abugidasInStringFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX_TWOXX);
+        Assertions.assertThat(abugidasInStringFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX);
+        Assertions.assertThat(abugidasInStringFieldsValidateSanitizeFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX);
         Assertions.assertThat(abugidasInStringFieldsValidateSanitizeFuzzer.description()).isNotNull();
         Assertions.assertThat(abugidasInStringFieldsValidateSanitizeFuzzer.typeOfDataSentToTheService()).isNotNull();
     }

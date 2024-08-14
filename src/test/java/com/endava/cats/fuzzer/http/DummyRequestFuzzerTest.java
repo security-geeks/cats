@@ -2,7 +2,7 @@ package com.endava.cats.fuzzer.http;
 
 import com.endava.cats.fuzzer.executor.SimpleExecutor;
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
@@ -17,6 +17,7 @@ import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Set;
 
 @QuarkusTest
 class DummyRequestFuzzerTest {
@@ -44,29 +45,16 @@ class DummyRequestFuzzerTest {
     }
 
     @Test
-    void givenAHttpMethodWithoutPayload_whenApplyingTheMalformedJsonFuzzer_thenTheResultsAreCorrectlyReported() {
-        FuzzingData data = FuzzingData.builder().method(HttpMethod.GET).requestContentTypes(List.of("application/json")).build();
-        ReflectionTestUtils.setField(data, "processedPayload", "{\"id\": 1}");
-
-        CatsResponse catsResponse = CatsResponse.builder().body("{}").responseCode(400).build();
-        Mockito.when(serviceCaller.call(Mockito.any())).thenReturn(catsResponse);
-        Mockito.doNothing().when(testCaseListener).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.any());
-
-        dummyRequestFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(1)).skipTest(Mockito.any(), Mockito.anyString());
-    }
-
-    @Test
     void givenAHttpMethodWithPayload_whenApplyingTheMalformedJsonFuzzer_thenTheResultsAreCorrectlyReported() {
-        FuzzingData data = FuzzingData.builder().method(HttpMethod.POST).requestContentTypes(List.of("application/json")).build();
+        FuzzingData data = FuzzingData.builder().method(HttpMethod.POST).requestContentTypes(List.of("application/json")).responseCodes(Set.of("400")).build();
         ReflectionTestUtils.setField(data, "processedPayload", "{\"id\": 1}");
 
         CatsResponse catsResponse = CatsResponse.builder().body("{}").responseCode(400).build();
         Mockito.when(serviceCaller.call(Mockito.any())).thenReturn(catsResponse);
-        Mockito.doNothing().when(testCaseListener).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.any());
+        Mockito.doNothing().when(testCaseListener).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.any(), Mockito.anyBoolean());
 
         dummyRequestFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamily.FOURXX));
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX), Mockito.anyBoolean(), Mockito.eq(true));
     }
 
     @Test
@@ -75,17 +63,12 @@ class DummyRequestFuzzerTest {
     }
 
     @Test
-    void shouldNotSkipForAnyHttpMethod() {
-        Assertions.assertThat(dummyRequestFuzzer.skipForHttpMethods()).isEmpty();
-    }
-
-    @Test
     void shouldHaveDescription() {
         Assertions.assertThat(dummyRequestFuzzer.description()).isNotBlank();
     }
 
     @Test
-    void shouldHaveToString() {
-        Assertions.assertThat(dummyRequestFuzzer).hasToString(dummyRequestFuzzer.getClass().getSimpleName());
+    void shouldSkipForNonHttpBodyMethods() {
+        Assertions.assertThat(dummyRequestFuzzer.skipForHttpMethods()).contains(HttpMethod.GET, HttpMethod.DELETE);
     }
 }

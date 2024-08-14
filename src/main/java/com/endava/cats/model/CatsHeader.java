@@ -9,6 +9,7 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.UUID;
 
 /**
@@ -30,14 +31,30 @@ public class CatsHeader {
         this.value = this.generateValue(param.getSchema());
     }
 
+    /**
+     * Creates a new CatsHeader from a OpenAPI Parameter object.
+     *
+     * @param param the OpenAPI Parameter object
+     * @return a CatsHeader object created based on the supplied Parameter
+     */
     public static CatsHeader fromHeaderParameter(Parameter param) {
         return new CatsHeader(param);
     }
 
+    /**
+     * Sets the header's value.
+     *
+     * @param value the value to be set
+     */
     public void withValue(String value) {
         this.value = value;
     }
 
+    /**
+     * Truncates the value if is longer than 50 characters.
+     *
+     * @return a truncated value of the header
+     */
     public String getTruncatedValue() {
         if (this.value != null && this.value.length() > 50) {
             return this.value.substring(0, 20) + "...[Total length:" + this.value.length() + "]";
@@ -47,6 +64,11 @@ public class CatsHeader {
     }
 
 
+    /**
+     * Creates a copy of the current header.
+     *
+     * @return a copy of the current header
+     */
     public CatsHeader copy() {
         return CatsHeader.builder().name(this.name).required(this.required).value(this.value).build();
     }
@@ -60,16 +82,13 @@ public class CatsHeader {
             return UUID.randomUUID().toString();
         }
         if ("date-time".equalsIgnoreCase(schema.getFormat())) {
-            return OffsetDateTime.now().toString();
+            return OffsetDateTime.now(ZoneId.systemDefault()).toString();
         }
 
         if ("string".equalsIgnoreCase(schema.getType())) {
             String pattern = schema.getPattern() != null ? schema.getPattern() : StringGenerator.ALPHANUMERIC_PLUS;
-            int minLength = schema.getMinLength() != null ? schema.getMinLength() : 0;
+            int minLength = schema.getMinLength() != null ? schema.getMinLength() : 1;
             int maxLength = schema.getMaxLength() != null ? schema.getMaxLength() : 30;
-            if (minLength == 0) {
-                minLength = maxLength / 2;
-            }
 
             return StringGenerator.generate(pattern, minLength, maxLength);
         }
@@ -79,10 +98,6 @@ public class CatsHeader {
         }
 
         return this.name;
-    }
-
-    public String nameAndValue() {
-        return name + "=" + value;
     }
 
     @Override

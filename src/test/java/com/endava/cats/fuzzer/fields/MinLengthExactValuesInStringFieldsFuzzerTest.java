@@ -2,7 +2,7 @@ package com.endava.cats.fuzzer.fields;
 
 import com.endava.cats.args.FilesArguments;
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.model.FuzzingData;
 import io.quarkus.test.junit.QuarkusTest;
 import io.swagger.v3.oas.models.media.StringSchema;
@@ -23,7 +23,7 @@ class MinLengthExactValuesInStringFieldsFuzzerTest {
     @BeforeEach
     void setup() {
         FilesArguments filesArguments = Mockito.mock(FilesArguments.class);
-        minLengthExactValuesInStringFieldsFuzzer = new MinLengthExactValuesInStringFieldsFuzzer(null, null, null, filesArguments);
+        minLengthExactValuesInStringFieldsFuzzer = new MinLengthExactValuesInStringFieldsFuzzer(null, null, filesArguments);
         Mockito.when(filesArguments.getRefData(Mockito.anyString())).thenReturn(Collections.emptyMap());
     }
 
@@ -71,8 +71,8 @@ class MinLengthExactValuesInStringFieldsFuzzerTest {
 
     @Test
     void shouldReturn2XXForExpectedResultCodes() {
-        Assertions.assertThat(minLengthExactValuesInStringFieldsFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualByComparingTo(ResponseCodeFamily.TWOXX);
-        Assertions.assertThat(minLengthExactValuesInStringFieldsFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualByComparingTo(ResponseCodeFamily.TWOXX);
+        Assertions.assertThat(minLengthExactValuesInStringFieldsFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.TWOXX);
+        Assertions.assertThat(minLengthExactValuesInStringFieldsFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.TWOXX);
     }
 
     @ParameterizedTest

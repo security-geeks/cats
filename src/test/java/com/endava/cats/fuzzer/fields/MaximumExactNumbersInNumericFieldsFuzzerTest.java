@@ -2,9 +2,10 @@ package com.endava.cats.fuzzer.fields;
 
 import com.endava.cats.args.FilesArguments;
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.model.FuzzingData;
 import io.quarkus.test.junit.QuarkusTest;
+import io.swagger.v3.oas.models.media.IntegerSchema;
 import io.swagger.v3.oas.models.media.StringSchema;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,7 +27,7 @@ class MaximumExactNumbersInNumericFieldsFuzzerTest {
     @BeforeEach
     void setup() {
         filesArguments = Mockito.mock(FilesArguments.class);
-        maximumExactNumbersInNumericFieldsFuzzer = new MaximumExactNumbersInNumericFieldsFuzzer(null, null, null, filesArguments);
+        maximumExactNumbersInNumericFieldsFuzzer = new MaximumExactNumbersInNumericFieldsFuzzer(null, null, filesArguments);
         Mockito.when(filesArguments.getRefData(Mockito.anyString())).thenReturn(Collections.emptyMap());
     }
 
@@ -83,12 +84,21 @@ class MaximumExactNumbersInNumericFieldsFuzzerTest {
 
     @Test
     void shouldReturn2XXForExpectedResultCodes() {
-        Assertions.assertThat(maximumExactNumbersInNumericFieldsFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualByComparingTo(ResponseCodeFamily.TWOXX);
-        Assertions.assertThat(maximumExactNumbersInNumericFieldsFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualByComparingTo(ResponseCodeFamily.TWOXX);
+        Assertions.assertThat(maximumExactNumbersInNumericFieldsFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.TWOXX);
+        Assertions.assertThat(maximumExactNumbersInNumericFieldsFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.TWOXX);
+    }
+
+    @Test
+    void shouldGenerateNumberBoundaryValue() {
+        IntegerSchema schema = new IntegerSchema();
+        schema.setMaximum(BigDecimal.ONE);
+        Object generated = maximumExactNumbersInNumericFieldsFuzzer.getBoundaryValue(schema);
+
+        Assertions.assertThat(generated).isInstanceOf(Number.class);
     }
 
     @ParameterizedTest
-    @CsvSource({",true", "mama,false"})
+    @CsvSource({",true", "mama,true"})
     void shouldTestBoundaryDefinedBasedOnFormat(String format, boolean expected) {
         StringSchema stringSchema = new StringSchema();
         FuzzingData data = FuzzingData.builder().requestPropertyTypes(Collections.singletonMap("test", stringSchema)).build();

@@ -7,18 +7,27 @@ import com.endava.cats.generator.simple.NumberGenerator;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
-import com.endava.cats.util.CatsUtil;
 import io.swagger.v3.oas.models.media.Schema;
-
 import jakarta.inject.Singleton;
+
 import java.util.List;
 
+/**
+ * Fuzzer that sends left boundary values for integer fields.
+ */
 @Singleton
 @FieldFuzzer
 public class IntegerFieldsLeftBoundaryFuzzer extends BaseBoundaryFieldFuzzer {
 
-    public IntegerFieldsLeftBoundaryFuzzer(ServiceCaller sc, TestCaseListener lr, CatsUtil cu, FilesArguments fa) {
-        super(sc, lr, cu, fa);
+    /**
+     * Creates a new IntegerFieldsLeftBoundaryFuzzer instance.
+     *
+     * @param sc the service caller
+     * @param lr the test case listener
+     * @param fa files arguments
+     */
+    public IntegerFieldsLeftBoundaryFuzzer(ServiceCaller sc, TestCaseListener lr, FilesArguments fa) {
+        super(sc, lr, fa);
     }
 
     @Override

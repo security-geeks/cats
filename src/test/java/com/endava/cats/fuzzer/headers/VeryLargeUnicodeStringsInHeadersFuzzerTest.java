@@ -1,6 +1,6 @@
 package com.endava.cats.fuzzer.headers;
 
-import com.endava.cats.args.IgnoreArguments;
+import com.endava.cats.args.FilterArguments;
 import com.endava.cats.args.MatchArguments;
 import com.endava.cats.args.ProcessingArguments;
 import com.endava.cats.fuzzer.executor.HeadersIteratorExecutor;
@@ -26,7 +26,7 @@ class VeryLargeUnicodeStringsInHeadersFuzzerTest {
         serviceCaller = Mockito.mock(ServiceCaller.class);
         testCaseListener = Mockito.mock(TestCaseListener.class);
         processingArguments = Mockito.mock(ProcessingArguments.class);
-        HeadersIteratorExecutor headersIteratorExecutor = new HeadersIteratorExecutor(serviceCaller, testCaseListener, Mockito.mock(MatchArguments.class), Mockito.mock(IgnoreArguments.class));
+        HeadersIteratorExecutor headersIteratorExecutor = new HeadersIteratorExecutor(serviceCaller, testCaseListener, Mockito.mock(MatchArguments.class), Mockito.mock(FilterArguments.class));
         veryLargeUnicodeStringsInHeadersFuzzer = new VeryLargeUnicodeStringsInHeadersFuzzer(headersIteratorExecutor, processingArguments);
     }
 
@@ -35,6 +35,10 @@ class VeryLargeUnicodeStringsInHeadersFuzzerTest {
         Assertions.assertThat(veryLargeUnicodeStringsInHeadersFuzzer.description()).isNotNull();
         Assertions.assertThat(veryLargeUnicodeStringsInHeadersFuzzer.getFuzzerContext().getTypeOfDataSentToTheService()).isNotNull();
         Assertions.assertThat(veryLargeUnicodeStringsInHeadersFuzzer.getFuzzerContext().getFuzzStrategy().get(0).name()).isEqualTo(FuzzingStrategy.replace().name());
+    }
+
+    @Test
+    void shouldNotMatchResponse() {
         Assertions.assertThat(veryLargeUnicodeStringsInHeadersFuzzer.getFuzzerContext().isMatchResponseSchema()).isFalse();
     }
 
@@ -42,5 +46,10 @@ class VeryLargeUnicodeStringsInHeadersFuzzerTest {
     void shouldGetPayloadSize() {
         Mockito.when(processingArguments.getLargeStringsSize()).thenReturn(20);
         Assertions.assertThat(veryLargeUnicodeStringsInHeadersFuzzer.getFuzzerContext().getFuzzStrategy().get(0).getData().toString()).hasSize(20 + "cats".length());
+    }
+
+    @Test
+    void shouldNotMatchContentType() {
+        Assertions.assertThat(veryLargeUnicodeStringsInHeadersFuzzer.getFuzzerContext().isMatchResponseContentType()).isFalse();
     }
 }

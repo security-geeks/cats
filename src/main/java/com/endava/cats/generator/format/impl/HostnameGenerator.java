@@ -4,11 +4,15 @@ import com.endava.cats.generator.format.api.InvalidDataFormatGenerator;
 import com.endava.cats.generator.format.api.OpenAPIFormat;
 import com.endava.cats.generator.format.api.ValidDataFormatGenerator;
 import io.swagger.v3.oas.models.media.Schema;
+import jakarta.inject.Singleton;
 import org.apache.commons.lang3.RandomStringUtils;
 
-import jakarta.inject.Singleton;
 import java.util.List;
 
+/**
+ * A generator class implementing various interfaces for generating valid and invalid hostname data formats.
+ * It also implements the OpenAPIFormat interface.
+ */
 @Singleton
 public class HostnameGenerator implements ValidDataFormatGenerator, InvalidDataFormatGenerator, OpenAPIFormat {
     @Override
@@ -33,7 +37,7 @@ public class HostnameGenerator implements ValidDataFormatGenerator, InvalidDataF
     }
 
     @Override
-    public List<String> marchingFormats() {
+    public List<String> matchingFormats() {
         return List.of("hostname");
     }
 }

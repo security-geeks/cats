@@ -7,18 +7,21 @@ import com.endava.cats.fuzzer.api.Fuzzer;
 import com.endava.cats.fuzzer.executor.SimpleExecutor;
 import com.endava.cats.fuzzer.executor.SimpleExecutorContext;
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.util.ConsoleUtils;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
-
 import jakarta.inject.Singleton;
-import java.net.URL;
+
+import java.net.URI;
 import java.util.List;
 
+/**
+ * Fuzzer that checks if deleted resources are still available.
+ */
 @HttpFuzzer
 @SecondPhaseFuzzer
 @Singleton
@@ -28,6 +31,13 @@ public class CheckDeletedResourcesNotAvailableFuzzer implements Fuzzer {
     private final CatsGlobalContext catsGlobalContext;
     private final TestCaseListener testCaseListener;
 
+    /**
+     * Creates a new CheckDeletedResourcesNotAvailableFuzzer instance.
+     *
+     * @param simpleExecutor    the executor
+     * @param catsGlobalContext the cats global context
+     * @param testCaseListener  the test case listener
+     */
     public CheckDeletedResourcesNotAvailableFuzzer(SimpleExecutor simpleExecutor, CatsGlobalContext catsGlobalContext, TestCaseListener testCaseListener) {
         this.simpleExecutor = simpleExecutor;
         this.catsGlobalContext = catsGlobalContext;
@@ -36,24 +46,26 @@ public class CheckDeletedResourcesNotAvailableFuzzer implements Fuzzer {
 
     @Override
     public void fuzz(FuzzingData data) {
-        if (data.getMethod() == HttpMethod.GET) {
-            logger.info("Stored successful DELETE requests: {}", catsGlobalContext.getSuccessfulDeletes().size());
-            for (String delete : catsGlobalContext.getSuccessfulDeletes()) {
-                simpleExecutor.execute(
-                        SimpleExecutorContext.builder()
-                                .logger(logger)
-                                .fuzzer(this)
-                                .expectedResponseCode(ResponseCodeFamily.FOURXX)
-                                .fuzzingData(data)
-                                .payload("{}")
-                                .path(getRelativePath(delete))
-                                .scenario("Check that previously deleted resource is not available")
-                                .responseProcessor(this::checkResponse)
-                                .build()
-                );
-            }
-            catsGlobalContext.getSuccessfulDeletes().clear();
+        if (data.getMethod() != HttpMethod.GET) {
+            return;
         }
+
+        logger.info("Stored successful DELETE requests: {}", catsGlobalContext.getSuccessfulDeletes().size());
+        for (String delete : catsGlobalContext.getSuccessfulDeletes()) {
+            simpleExecutor.execute(
+                    SimpleExecutorContext.builder()
+                            .logger(logger)
+                            .fuzzer(this)
+                            .expectedResponseCode(ResponseCodeFamilyPredefined.FOURXX)
+                            .fuzzingData(data)
+                            .payload("{}")
+                            .path(getRelativePath(delete))
+                            .scenario("Check that previously deleted resource is not available")
+                            .responseProcessor(this::checkResponse)
+                            .build()
+            );
+        }
+        catsGlobalContext.getSuccessfulDeletes().clear();
     }
 
     private void checkResponse(CatsResponse response, FuzzingData data) {
@@ -68,7 +80,7 @@ public class CheckDeletedResourcesNotAvailableFuzzer implements Fuzzer {
 
     static String getRelativePath(String url) {
         try {
-            return new URL(url).getPath();
+            return URI.create(url).toURL().getPath();
         } catch (Exception e) {
             return url;
         }

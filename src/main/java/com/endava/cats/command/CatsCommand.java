@@ -10,9 +10,10 @@ import com.endava.cats.args.MatchArguments;
 import com.endava.cats.args.ProcessingArguments;
 import com.endava.cats.args.ReportingArguments;
 import com.endava.cats.args.UserArguments;
+import com.endava.cats.context.CatsConfiguration;
 import com.endava.cats.context.CatsGlobalContext;
+import com.endava.cats.exception.CatsException;
 import com.endava.cats.factory.FuzzingDataFactory;
-import com.endava.cats.factory.NoMediaType;
 import com.endava.cats.fuzzer.api.Fuzzer;
 import com.endava.cats.fuzzer.special.FunctionalFuzzer;
 import com.endava.cats.http.HttpMethod;
@@ -21,22 +22,21 @@ import com.endava.cats.openapi.OpenApiUtils;
 import com.endava.cats.report.ExecutionStatisticsListener;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.util.CatsUtil;
+import com.endava.cats.util.ConsoleUtils;
 import com.endava.cats.util.VersionChecker;
 import com.endava.cats.util.VersionProvider;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.PathItem;
-import io.swagger.v3.oas.models.media.Schema;
-import jakarta.enterprise.context.Dependent;
 import jakarta.inject.Inject;
-import org.apache.commons.lang3.StringUtils;
+import lombok.Getter;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.fusesource.jansi.Ansi;
 import picocli.AutoComplete;
 import picocli.CommandLine;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -50,17 +50,48 @@ import java.util.stream.Collectors;
 
 import static org.fusesource.jansi.Ansi.ansi;
 
+/**
+ * Main application command.
+ */
 @CommandLine.Command(
         name = "cats",
         mixinStandardHelpOptions = true,
-        header = "%n@|green cats - OpenAPI fuzzer and negative testing tool; version ${app.version}|@ %n",
+        header = {
+                "%n@|green cats - OpenAPI fuzzer and negative testing tool; version ${app.version}|@ %n",
+                """
+                        # # # # # # # # # # # # # # # # # # # # # # # # # #
+                        #             _____   ___ _____ _____             #
+                        #            /  __ \\ / _ \\_   _/  ___|            #
+                        #            | /  \\// /_\\ \\| | \\ `--.             #
+                        #            | |    |  _  || |  `--. \\            #
+                        #            | \\__/\\| | | || | /\\__/ /            #
+                        #             \\____/\\_| |_/\\_/ \\____/             #
+                        #           .. ...    -.-. --- --- .-..           #
+                        #                                                 #
+                        # # # # # # # # # # # # # # # # # # # # # # # # # #
+                        """
+        },
         usageHelpAutoWidth = true,
         versionProvider = VersionProvider.class,
         commandListHeading = "%n@|bold,underline Commands:|@%n",
         defaultValueProvider = CommandLine.PropertiesDefaultProvider.class,
         exitCodeOnInvalidInput = 191,
         exitCodeOnExecutionException = 192,
-//        resourceBundle = "version",
+        resourceBundle = "version",
+        abbreviateSynopsis = true,
+        synopsisHeading = "Usage:%n",
+        customSynopsis = {"@|bold cats|@ @|fg(yellow) -c|@ <CONTRACT> @|fg(yellow) -s|@ <SERVER> [ADDITIONAL OPTIONS]",
+                "@|bold cats (list | replay | run | fuzz | lint | info | stats | validate | random)|@ [OPTIONS]", "%n"},
+        exitCodeListHeading = "%n@|bold,underline Exit Codes:|@%n",
+        exitCodeList = {"@|bold  0|@:Successful program execution",
+                "@|bold 191|@:Usage error: user input for the command was incorrect",
+                "@|bold 192|@:Internal execution error: an exception occurred when executing command",
+                "@|bold ERR|@:Where ERR is the number of errors reported by cats"},
+        footerHeading = "%n@|bold,underline Examples:|@%n",
+        footer = {"  Run CATS in blackbox mode and only report 500 http error codes:",
+                "    cats -c openapi.yml -s http://localhost:8080 -b -k",
+                "", "  Run CATS with authentication headers from an environment variable called TOKEN:",
+                "    cats -c openapi.yml -s http://localhost:8080 -H API-Token=$$TOKEN"},
         subcommands = {
                 AutoComplete.GenerateCompletion.class,
                 CommandLine.HelpCommand.class,
@@ -68,12 +99,16 @@ import static org.fusesource.jansi.Ansi.ansi;
                 ReplayCommand.class,
                 RunCommand.class,
                 TemplateFuzzCommand.class,
-                LintCommand.class
+                LintCommand.class,
+                InfoCommand.class,
+                StatsCommand.class,
+                ValidateCommand.class,
+                RandomCommand.class,
+                GenerateCommand.class
         })
-@Dependent
 public class CatsCommand implements Runnable, CommandLine.IExitCodeGenerator {
-    private final PrettyLogger logger = PrettyLoggerFactory.getLogger(CatsCommand.class);
-    private static final String SEPARATOR = StringUtils.repeat("-", 100);
+    private final PrettyLogger logger;
+    private static final String SEPARATOR = "-".repeat(ConsoleUtils.getConsoleColumns(22));
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     @Inject
     FuzzingDataFactory fuzzingDataFactory;
@@ -124,10 +159,19 @@ public class CatsCommand implements Runnable, CommandLine.IExitCodeGenerator {
     @Inject
     VersionChecker versionChecker;
 
+    @Getter
     @ConfigProperty(name = "quarkus.application.version", defaultValue = "1.0.0")
     String appVersion;
 
     private int exitCodeDueToErrors;
+
+
+    /**
+     * Creates a new instance of CatsCommand.
+     */
+    public CatsCommand() {
+        logger = PrettyLoggerFactory.getLogger(CatsCommand.class);
+    }
 
     @Override
     public void run() {
@@ -140,9 +184,9 @@ public class CatsCommand implements Runnable, CommandLine.IExitCodeGenerator {
             this.printVersion(newVersion);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        } catch (IOException | ExecutionException e) {
-            logger.fatal("Something went wrong while running CATS: {}", e.getMessage());
-            logger.debug("Stacktrace", e);
+        } catch (CatsException | IOException | ExecutionException | IllegalArgumentException e) {
+            logger.fatal("Something went wrong while running CATS: {}", e.toString());
+            logger.debug("Stacktrace: {}", e);
             exitCodeDueToErrors = 192;
         }
     }
@@ -175,13 +219,23 @@ public class CatsCommand implements Runnable, CommandLine.IExitCodeGenerator {
         }
     }
 
-    public void doLogic() throws IOException {
-        this.doEarlyOperations();
+    private void doLogic() throws IOException {
+        this.doFirst();
         OpenAPI openAPI = this.createOpenAPI();
+        this.checkOpenAPI(openAPI);
+        //reporting path is initialized only if OpenAPI spec is successfully parsed
         testCaseListener.initReportingPath();
+        this.printConfiguration(openAPI);
         this.initGlobalData(openAPI);
+        testCaseListener.renderFuzzingHeader();
         this.startFuzzing(openAPI);
         this.executeCustomFuzzer();
+    }
+
+    private void checkOpenAPI(OpenAPI openAPI) {
+        if (openAPI == null || openAPI.getPaths() == null || openAPI.getPaths().isEmpty()) {
+            throw new IllegalArgumentException("Provided OpenAPI specs are invalid!");
+        }
     }
 
     Future<VersionChecker.CheckResult> checkForNewVersion() {
@@ -214,18 +268,20 @@ public class CatsCommand implements Runnable, CommandLine.IExitCodeGenerator {
     }
 
     private void initGlobalData(OpenAPI openAPI) {
-        Map<String, Schema> allSchemasFromOpenApi = OpenApiUtils.getSchemas(openAPI, processingArguments.getContentType());
-        globalContext.getSchemaMap().putAll(allSchemasFromOpenApi);
-        globalContext.getSchemaMap().put(NoMediaType.EMPTY_BODY, NoMediaType.EMPTY_BODY_SCHEMA);
-        globalContext.getExampleMap().putAll(OpenApiUtils.getExamples(openAPI));
-        logger.debug("Schemas: {}", allSchemasFromOpenApi.keySet());
+        CatsConfiguration catsConfiguration = new CatsConfiguration(appVersion, apiArguments.getContract(), apiArguments.getServer(), filterArguments.getHttpMethods(),
+                filterArguments.getFirstPhaseFuzzersForPath().size() + filterArguments.getSecondPhaseFuzzers().size(),
+                filterArguments.getPathsToRun(openAPI).size() + "/" + openAPI.getPaths().size());
+
+        globalContext.init(openAPI, processingArguments.getContentType(), filesArguments.getFuzzConfigProperties(), catsConfiguration);
+
+        logger.debug("Fuzzers custom configuration: {}", globalContext.getFuzzersConfiguration());
+        logger.debug("Schemas: {}", globalContext.getSchemaMap().keySet());
     }
 
-    public void startFuzzing(OpenAPI openAPI) {
-        List<String> suppliedPaths = this.matchSuppliedPathsWithContractPaths(openAPI);
+    void startFuzzing(OpenAPI openAPI) {
+        List<String> suppliedPaths = filterArguments.getPathsToRun(openAPI);
 
         for (Map.Entry<String, PathItem> entry : this.sortPathsAlphabetically(openAPI)) {
-
             if (suppliedPaths.contains(entry.getKey())) {
                 this.fuzzPath(entry, openAPI);
             } else {
@@ -247,68 +303,44 @@ public class CatsCommand implements Runnable, CommandLine.IExitCodeGenerator {
         }
     }
 
-    /**
-     * Check if there are any supplied paths and match them against the contract
-     *
-     * @param openAPI the OpenAPI object parsed from the contract
-     * @return the list of paths from the contract matching the supplied list
-     */
-    private List<String> matchSuppliedPathsWithContractPaths(OpenAPI openAPI) {
-        List<String> suppliedPaths = this.matchWildCardPaths(filterArguments.getPaths(), openAPI);
-        if (filterArguments.getPaths().isEmpty()) {
-            suppliedPaths.addAll(openAPI.getPaths().keySet());
-        }
-        List<String> skipPaths = this.matchWildCardPaths(filterArguments.getSkipPaths(), openAPI);
-        suppliedPaths = suppliedPaths.stream().filter(path -> !skipPaths.contains(path)).toList();
-
-        logger.debug("Supplied paths before filtering {}", suppliedPaths);
-        suppliedPaths = CatsUtil.filterAndPrintNotMatching(suppliedPaths, path -> openAPI.getPaths().containsKey(path), logger, "Supplied path is not matching the contract {}", Object::toString);
-        logger.debug("Supplied paths after filtering {}", suppliedPaths);
-
-        return suppliedPaths;
-    }
-
-    private List<String> matchWildCardPaths(List<String> paths, OpenAPI openAPI) {
-        Set<String> allContractPaths = openAPI.getPaths().keySet();
-        Map<Boolean, List<String>> pathsByWildcard = paths.stream().collect(Collectors.partitioningBy(path -> path.contains("*")));
-
-        List<String> result = new ArrayList<>(pathsByWildcard.get(false));
-
-        for (String wildCardPath : pathsByWildcard.get(true)) {
-            result.addAll(allContractPaths
-                    .stream()
-                    .filter(path -> (wildCardPath.startsWith("*") && path.endsWith(wildCardPath.substring(1))) ||
-                            (wildCardPath.endsWith("*") && path.startsWith(wildCardPath.substring(0, wildCardPath.length() - 1))) ||
-                            path.contains(wildCardPath.substring(1, wildCardPath.length() - 1)))
-                    .toList());
-        }
-
-        logger.debug("Final list of matching wildcard paths: {}", result);
-        return result;
-    }
-
-    public OpenAPI createOpenAPI() throws IOException {
+    OpenAPI createOpenAPI() throws IOException {
         String finishMessage = ansi().fgGreen().a("Finished parsing the contract in {} ms").reset().toString();
         long t0 = System.currentTimeMillis();
         OpenAPI openAPI = OpenApiUtils.readOpenApi(apiArguments.getContract());
-        logger.complete(finishMessage, (System.currentTimeMillis() - t0));
+        logger.debug(finishMessage, (System.currentTimeMillis() - t0));
         return openAPI;
     }
 
-    void doEarlyOperations() throws IOException {
-        this.processLogLevelArgument();
-        filesArguments.loadConfig();
-        apiArguments.validateRequired(spec);
-    }
-
-    private void processLogLevelArgument() {
+    void doFirst() throws IOException {
+        //this is a hack to set terminal width here in order to avoid importing a full-blown library like jline
+        // just for getting the terminal width
+        ConsoleUtils.initTerminalWidth(spec);
         reportingArguments.processLogData();
+        apiArguments.validateRequired(spec);
+        apiArguments.validateValidServer(spec);
+        filesArguments.loadConfig();
     }
 
-    public void fuzzPath(Map.Entry<String, PathItem> pathItemEntry, OpenAPI openAPI) {
+    private void printConfiguration(OpenAPI openAPI) {
+        logger.config(ansi().bold().a("OpenAPI specs: {}").reset().toString(), ansi().fg(Ansi.Color.BLUE).a(apiArguments.getContract()).reset());
+        logger.config(ansi().bold().a("API base url: {}").reset().toString(), ansi().fg(Ansi.Color.BLUE).a(apiArguments.getServer()).reset());
+        logger.config(ansi().bold().a("Reporting path: {}").reset().toString(), ansi().fg(Ansi.Color.BLUE).a(reportingArguments.getOutputReportFolder()).reset());
+        logger.config(ansi().bold().a("{} configured fuzzers out of {} total fuzzers").bold().reset().toString(),
+                ansi().fg(Ansi.Color.BLUE).a(filterArguments.getFirstPhaseFuzzersForPath().size()).reset().bold(),
+                ansi().fg(Ansi.Color.BLUE).a(filterArguments.getAllRegisteredFuzzers().size()).reset().bold());
+        logger.config(ansi().bold().a("{} configured paths out of {} total OpenAPI paths").bold().reset().toString(),
+                ansi().fg(Ansi.Color.BLUE).a(filterArguments.getPathsToRun(openAPI).size()).bold().reset().bold(),
+                ansi().fg(Ansi.Color.BLUE).a(openAPI.getPaths().size()).reset().bold());
+        logger.config(ansi().bold().a("HTTP methods in scope: {}").reset().toString(), ansi().fg(Ansi.Color.BLUE).a(filterArguments.getHttpMethods()).reset());
+
+        int nofOfOperations = OpenApiUtils.getNumberOfOperations(openAPI);
+        logger.config(ansi().bold().a("Total number of OpenAPI operations: {}").reset().toString(), ansi().fg(Ansi.Color.BLUE).a(nofOfOperations));
+    }
+
+    private void fuzzPath(Map.Entry<String, PathItem> pathItemEntry, OpenAPI openAPI) {
         /* WE NEED TO ITERATE THROUGH EACH HTTP OPERATION CORRESPONDING TO THE CURRENT PATH ENTRY*/
-        logger.noFormat(" ");
-        logger.start("Start fuzzing path {}", pathItemEntry.getKey());
+        String ansiString = ansi().bold().a("Start fuzzing path {}").reset().toString();
+        logger.start(ansiString, pathItemEntry.getKey());
         List<FuzzingData> fuzzingDataList = fuzzingDataFactory.fromPathItem(pathItemEntry.getKey(), pathItemEntry.getValue(), openAPI);
 
         if (fuzzingDataList.isEmpty()) {
@@ -316,42 +348,46 @@ public class CatsCommand implements Runnable, CommandLine.IExitCodeGenerator {
             return;
         }
 
-        List<FuzzingData> fuzzingDataListWithHttpMethodsFiltered = fuzzingDataList.stream()
-                .filter(fuzzingData -> filterArguments.getHttpMethods().contains(fuzzingData.getMethod()))
+        /* If certain HTTP methods are skipped, we remove corresponding FuzzingData */
+        /* If request uses oneOf/anyOf we only keep the one supplied through --oneOfSelection/--anyOfSelection */
+        List<FuzzingData> filteredFuzzingData = fuzzingDataList.stream()
+                .filter(fuzzingData -> filterArguments.isHttpMethodSupplied(fuzzingData.getMethod()))
+                .filter(fuzzingData -> processingArguments.matchesXxxSelection(fuzzingData.getPayload()))
                 .toList();
-        Set<HttpMethod> excludedHttpMethods = fuzzingDataList.stream()
+
+        Set<HttpMethod> allHttpMethodsFromFuzzingData = filteredFuzzingData
+                .stream()
                 .map(FuzzingData::getMethod)
-                .filter(method -> !filterArguments.getHttpMethods().contains(method))
                 .collect(Collectors.toSet());
 
-        List<Fuzzer> allFuzzersSorted = filterArguments.getAllRegisteredFuzzers();
-        List<String> configuredFuzzers = filterArguments.getFirstPhaseFuzzersForPath();
-
-        logger.config("The following HTTP methods won't be executed for path {}: {}", pathItemEntry.getKey(), excludedHttpMethods);
-        logger.config("{} configured fuzzers out of {} total fuzzers: {}", configuredFuzzers.size(), (long) allFuzzersSorted.size(), configuredFuzzers);
-
-        this.runFuzzers(pathItemEntry, fuzzingDataListWithHttpMethodsFiltered, allFuzzersSorted, configuredFuzzers);
-        this.runFuzzers(pathItemEntry, fuzzingDataListWithHttpMethodsFiltered, allFuzzersSorted, filterArguments.getSecondPhaseFuzzers());
+        List<Fuzzer> fuzzersToRun = filterArguments.filterOutFuzzersNotMatchingHttpMethods(allHttpMethodsFromFuzzingData);
+        this.runFuzzers(filteredFuzzingData, fuzzersToRun);
+        this.runFuzzers(filteredFuzzingData, filterArguments.getSecondPhaseFuzzers());
     }
 
-    private void runFuzzers(Map.Entry<String, PathItem> pathItemEntry, List<FuzzingData> fuzzingDataListWithHttpMethodsFiltered, List<Fuzzer> allFuzzersSorted, List<String> configuredFuzzers) {
+    private void runFuzzers(List<FuzzingData> fuzzingDataListWithHttpMethodsFiltered, List<Fuzzer> configuredFuzzers) {
         /*We only run the fuzzers supplied and exclude those that do not apply for certain HTTP methods*/
-        for (Fuzzer fuzzer : allFuzzersSorted) {
-            if (configuredFuzzers.contains(fuzzer.toString())) {
-                CatsUtil.filterAndPrintNotMatching(fuzzingDataListWithHttpMethodsFiltered, data -> !fuzzer.skipForHttpMethods().contains(data.getMethod()),
-                                logger, "HTTP method {} is not supported by {}", t -> t.getMethod().toString(), fuzzer.toString())
-                        .forEach(data -> {
-                            logger.start("Starting Fuzzer {}, http method {}, path {}", ansi().fgGreen().a(fuzzer.toString()).reset(), data.getMethod(), data.getPath());
-                            logger.debug("Fuzzing payload: {}", data.getPayload());
-                            testCaseListener.beforeFuzz(fuzzer.getClass());
-                            fuzzer.fuzz(data);
-                            testCaseListener.afterFuzz();
-                            logger.complete("Finishing Fuzzer {}, http method {}, path {}", ansi().fgGreen().a(fuzzer.toString()).reset(), data.getMethod(), data.getPath());
-                            logger.info("{} {}", SEPARATOR, "\n");
-                        });
-            } else {
-                logger.debug("Skipping fuzzer {} for path {} as configured!", fuzzer, pathItemEntry.getKey());
-            }
+
+        for (Fuzzer fuzzer : configuredFuzzers) {
+            List<FuzzingData> filteredData = CatsUtil.filterAndPrintNotMatching(
+                    fuzzingDataListWithHttpMethodsFiltered,
+                    data -> !fuzzer.skipForHttpMethods().contains(data.getMethod()),
+                    logger,
+                    "HTTP method {} is not supported by {}",
+                    t -> t.getMethod().toString(), fuzzer.toString());
+            filteredData.forEach(data -> {
+                logger.start("Starting Fuzzer {}, http method {}, path {}", ansi().fgGreen().a(fuzzer.toString()).reset(), data.getMethod(), data.getPath());
+                logger.debug("Fuzzing payload: {}", data.getPayload());
+                if (!(fuzzer instanceof FunctionalFuzzer)) {
+                    testCaseListener.beforeFuzz(fuzzer.getClass(), data.getContractPath(), data.getMethod().name());
+                }
+                fuzzer.fuzz(data);
+                if (!(fuzzer instanceof FunctionalFuzzer)) {
+                    testCaseListener.afterFuzz(data.getContractPath());
+                }
+                logger.complete("Finishing Fuzzer {}, http method {}, path {}", ansi().fgGreen().a(fuzzer.toString()).reset(), data.getMethod(), data.getPath());
+                logger.info("{}", SEPARATOR);
+            });
         }
     }
 
@@ -359,4 +395,5 @@ public class CatsCommand implements Runnable, CommandLine.IExitCodeGenerator {
     public int getExitCode() {
         return exitCodeDueToErrors + executionStatisticsListener.getErrors();
     }
+
 }

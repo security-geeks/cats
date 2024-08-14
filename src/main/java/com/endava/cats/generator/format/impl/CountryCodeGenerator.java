@@ -4,33 +4,66 @@ import com.endava.cats.generator.format.api.InvalidDataFormatGenerator;
 import com.endava.cats.generator.format.api.OpenAPIFormat;
 import com.endava.cats.generator.format.api.PropertySanitizer;
 import com.endava.cats.generator.format.api.ValidDataFormatGenerator;
+import com.endava.cats.util.CatsUtil;
 import io.swagger.v3.oas.models.media.Schema;
-
 import jakarta.inject.Singleton;
+
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
-import java.util.Random;
-import java.util.Set;
 
+/**
+ * A generator class implementing various interfaces for generating valid and invalid country code data formats.
+ * It also implements the OpenAPIFormat interface.
+ */
 @Singleton
 public class CountryCodeGenerator implements ValidDataFormatGenerator, InvalidDataFormatGenerator, OpenAPIFormat {
-    private final Random random = new Random();
-
     @Override
     public Object generate(Schema<?> schema) {
-        Locale.IsoCountryCode isoCountryCode = Locale.IsoCountryCode.PART1_ALPHA3;
-        if (schema.getMinLength() != null && schema.getMinLength() == 2) {
-            isoCountryCode = Locale.IsoCountryCode.PART1_ALPHA2;
+        String[] isoCountries = Locale.getISOCountries();
+        String randomCountry = Arrays.stream(Locale.getISOCountries())
+                .skip(CatsUtil.random().nextInt(isoCountries.length))
+                .findFirst()
+                .orElse(Locale.UK.getCountry());
+
+        Locale locale = new Locale.Builder().setLanguage("en").setRegion(randomCountry).build();
+
+        if (hasLengthTwo(schema) || patternMatchesTwoLetterIsoCode(schema)) {
+            return locale.getCountry();
         }
-        Set<String> isoCountries = Locale.getISOCountries(isoCountryCode);
-        return isoCountries.stream().skip(random.nextInt(isoCountries.size())).findFirst().orElse(Locale.UK.getCountry());
+        if (hasLengthThree(schema) || patternMatchesThreeLetterIsoCode(schema)) {
+            return locale.getISO3Country();
+        }
+
+        return locale.getDisplayCountry();
+    }
+
+    private static boolean patternMatchesTwoLetterIsoCode(Schema<?> schema) {
+        return schema.getPattern() != null && "RO".matches(schema.getPattern());
+    }
+
+    private static boolean patternMatchesThreeLetterIsoCode(Schema<?> schema) {
+        return schema.getPattern() != null && "ROU".matches(schema.getPattern());
+    }
+
+    private static boolean hasLengthTwo(Schema<?> schema) {
+        return (schema.getMinLength() != null && schema.getMinLength() == 2) ||
+                (schema.getMaxLength() != null && schema.getMaxLength() == 2);
+    }
+
+    private static boolean hasLengthThree(Schema<?> schema) {
+        return (schema.getMinLength() != null && schema.getMinLength() == 3) ||
+                (schema.getMaxLength() != null && schema.getMaxLength() == 3);
     }
 
     @Override
     public boolean appliesTo(String format, String propertyName) {
+        String[] parts = propertyName.split("#", 0);
+        String lastPart = parts[parts.length - 1];
         return "iso3166".equalsIgnoreCase(PropertySanitizer.sanitize(format)) ||
                 "countrycode".equalsIgnoreCase(PropertySanitizer.sanitize(format)) ||
-                PropertySanitizer.sanitize(propertyName).toLowerCase(Locale.ROOT).endsWith("countrycode");
+                PropertySanitizer.sanitize(lastPart).endsWith("country") ||
+                PropertySanitizer.sanitize(lastPart).startsWith("country");
     }
 
     @Override
@@ -44,7 +77,7 @@ public class CountryCodeGenerator implements ValidDataFormatGenerator, InvalidDa
     }
 
     @Override
-    public List<String> marchingFormats() {
-        return List.of("iso3166", "countryCode", "country-code", "country_code");
+    public List<String> matchingFormats() {
+        return List.of("iso3166", "countryCode", "country-code", "country_code", "country");
     }
 }

@@ -2,24 +2,39 @@ package com.endava.cats.generator.format.impl;
 
 import com.endava.cats.generator.format.api.InvalidDataFormatGenerator;
 import com.endava.cats.generator.format.api.OpenAPIFormat;
+import com.endava.cats.generator.format.api.PropertySanitizer;
 import com.endava.cats.generator.format.api.ValidDataFormatGenerator;
+import com.endava.cats.util.CatsUtil;
 import io.swagger.v3.oas.models.media.Schema;
-import org.apache.commons.lang3.RandomStringUtils;
-
 import jakarta.inject.Singleton;
-import java.util.List;
 
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+
+/**
+ * A generator class implementing interfaces for generating valid and invalid IPv4 address data formats.
+ * It also implements the OpenAPIFormat interface.
+ */
 @Singleton
 public class IPV4Generator implements ValidDataFormatGenerator, InvalidDataFormatGenerator, OpenAPIFormat {
     @Override
     public Object generate(Schema<?> schema) {
-        return "%s.%s.%s.%s".formatted(RandomStringUtils.randomNumeric(1, 255), RandomStringUtils.randomNumeric(1, 255), RandomStringUtils.randomNumeric(1, 255), RandomStringUtils.randomNumeric(1, 255));
+        return IntStream.range(0, 4)
+                .mapToObj(i -> String.valueOf(CatsUtil.random().nextInt(254) + 1))
+                .collect(Collectors.joining("."));
     }
 
     @Override
     public boolean appliesTo(String format, String propertyName) {
-        return propertyName.toLowerCase().endsWith("ip") || propertyName.toLowerCase().endsWith("ipaddress")
-                || "ip".equalsIgnoreCase(format) || "ipv4".equalsIgnoreCase(format);
+        String[] propertyParts = propertyName.split("#", -1);
+        String partToTest = propertyParts[propertyParts.length - 1];
+
+        return (partToTest.toLowerCase().endsWith("ip") && !partToTest.toLowerCase().startsWith("zip")
+                && !partToTest.toLowerCase().endsWith("citizenship")) ||
+                PropertySanitizer.sanitize(partToTest).endsWith("ipaddress") ||
+                "ip".equalsIgnoreCase(format) ||
+                "ipv4".equalsIgnoreCase(format);
     }
 
     @Override
@@ -33,7 +48,7 @@ public class IPV4Generator implements ValidDataFormatGenerator, InvalidDataForma
     }
 
     @Override
-    public List<String> marchingFormats() {
+    public List<String> matchingFormats() {
         return List.of("ip", "ipv4");
     }
 }

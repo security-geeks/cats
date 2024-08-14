@@ -3,20 +3,18 @@ package com.endava.cats.fuzzer.executor;
 import com.endava.cats.args.FilesArguments;
 import com.endava.cats.args.MatchArguments;
 import com.endava.cats.fuzzer.api.Fuzzer;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseExporter;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.strategy.FuzzingStrategy;
-import com.endava.cats.util.CatsUtil;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.media.StringSchema;
-import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -37,8 +35,6 @@ class FieldsIteratorExecutorTest {
     private ServiceCaller serviceCaller;
     @InjectSpy
     private TestCaseListener testCaseListener;
-    @Inject
-    CatsUtil catsUtil;
     private MatchArguments matchArguments;
 
     private FilesArguments filesArguments;
@@ -50,7 +46,7 @@ class FieldsIteratorExecutorTest {
         filesArguments = Mockito.mock(FilesArguments.class);
         ReflectionTestUtils.setField(testCaseListener, "testCaseExporter", Mockito.mock(TestCaseExporter.class));
 
-        fieldsIteratorExecutor = new FieldsIteratorExecutor(serviceCaller, testCaseListener, catsUtil, matchArguments, filesArguments);
+        fieldsIteratorExecutor = new FieldsIteratorExecutor(serviceCaller, testCaseListener, matchArguments, filesArguments);
     }
 
     @Test
@@ -69,9 +65,9 @@ class FieldsIteratorExecutorTest {
 
     @Test
     void shouldReportResult() {
-        fieldsIteratorExecutor.execute(setupContextBuilder().expectedResponseCode(ResponseCodeFamily.FOURXX).build());
+        fieldsIteratorExecutor.execute(setupContextBuilder().expectedResponseCode(ResponseCodeFamilyPredefined.FOURXX).build());
 
-        Mockito.verify(testCaseListener, Mockito.times(4)).reportResult(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.eq(ResponseCodeFamily.FOURXX));
+        Mockito.verify(testCaseListener, Mockito.times(4)).reportResult(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX));
     }
 
     @ParameterizedTest
@@ -123,7 +119,7 @@ class FieldsIteratorExecutorTest {
     @Test
     void shouldNotRunForFieldsRemovedFromRefData() {
         Mockito.when(filesArguments.getRefData(Mockito.any())).thenReturn(Map.of("id", ServiceCaller.CATS_REMOVE_FIELD));
-        fieldsIteratorExecutor.execute(setupContextBuilder().expectedResponseCode(ResponseCodeFamily.FOURXX).build());
-        Mockito.verify(testCaseListener, Mockito.times(2)).reportResult(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.eq(ResponseCodeFamily.FOURXX));
+        fieldsIteratorExecutor.execute(setupContextBuilder().expectedResponseCode(ResponseCodeFamilyPredefined.FOURXX).build());
+        Mockito.verify(testCaseListener, Mockito.times(2)).reportResult(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX));
     }
 }

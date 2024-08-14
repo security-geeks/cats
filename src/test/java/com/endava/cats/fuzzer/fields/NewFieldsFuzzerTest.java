@@ -1,7 +1,7 @@
 package com.endava.cats.fuzzer.fields;
 
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
@@ -60,7 +60,7 @@ class NewFieldsFuzzerTest {
         setup(HttpMethod.POST);
         newFieldsFuzzer.fuzz(data);
 
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamily.FOURXX));
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX));
     }
 
     @Test
@@ -68,7 +68,7 @@ class NewFieldsFuzzerTest {
         setup(HttpMethod.GET);
         newFieldsFuzzer.fuzz(data);
 
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamily.TWOXX));
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamilyPredefined.TWOXX));
     }
 
     @Test
@@ -88,6 +88,24 @@ class NewFieldsFuzzerTest {
 
         Assertions.assertThat(element.getAsJsonArray().get(0).getAsJsonObject().get(NEW_FIELD)).isNotNull();
         Assertions.assertThat(element.getAsJsonArray().get(0).getAsJsonObject().get(NEW_FIELD + "random")).isNull();
+    }
+
+    @Test
+    void shouldNotRunWhenPayloadIsArrayOfPrimitives() {
+        String payload = "[1, 2, 3]";
+        data = FuzzingData.builder().payload(payload).reqSchema(new StringSchema()).build();
+        newFieldsFuzzer.fuzz(data);
+
+        Mockito.verify(testCaseListener, Mockito.times(0)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX));
+    }
+
+    @Test
+    void shouldNotRunForPrimitivePayload() {
+        String payload = "1";
+        data = FuzzingData.builder().payload(payload).reqSchema(new StringSchema()).build();
+        newFieldsFuzzer.fuzz(data);
+
+        Mockito.verify(testCaseListener, Mockito.times(0)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX));
     }
 
     private void setup(HttpMethod method) {

@@ -1,6 +1,7 @@
 package com.endava.cats.fuzzer.headers;
 
 import com.endava.cats.fuzzer.executor.SimpleExecutor;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.model.CatsHeader;
 import com.endava.cats.model.FuzzingData;
 import io.quarkus.test.junit.QuarkusTest;
@@ -41,5 +42,10 @@ class DummyAcceptHeadersFuzzerTest {
 
         Assertions.assertThat(headers).hasSize(1);
         Assertions.assertThat(headers.get(0)).contains(CatsHeader.builder().name("Accept").build());
+    }
+
+    @Test
+    void shouldReturn4XXMTResponseCode() {
+        Assertions.assertThat(dummyAcceptHeadersFuzzer.getResponseCodeFamily()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX_MT);
     }
 }

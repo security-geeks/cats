@@ -2,9 +2,10 @@ package com.endava.cats.fuzzer.fields;
 
 import com.endava.cats.args.FilesArguments;
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.model.FuzzingData;
 import io.quarkus.test.junit.QuarkusTest;
+import io.swagger.v3.oas.models.media.IntegerSchema;
 import io.swagger.v3.oas.models.media.StringSchema;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,16 +16,27 @@ import org.mockito.Mockito;
 
 import java.math.BigDecimal;
 import java.util.Collections;
+import java.util.Map;
 
 @QuarkusTest
 class MinimumExactNumbersInNumericFieldsFuzzerTest {
     private MinimumExactNumbersInNumericFieldsFuzzer minimumExactNumbersInNumericFieldsFuzzer;
+    private FilesArguments filesArguments;
 
     @BeforeEach
     void setup() {
-        FilesArguments filesArguments = Mockito.mock(FilesArguments.class);
-        minimumExactNumbersInNumericFieldsFuzzer = new MinimumExactNumbersInNumericFieldsFuzzer(null, null, null, filesArguments);
+        filesArguments = Mockito.mock(FilesArguments.class);
+        minimumExactNumbersInNumericFieldsFuzzer = new MinimumExactNumbersInNumericFieldsFuzzer(null, null, filesArguments);
         Mockito.when(filesArguments.getRefData(Mockito.anyString())).thenReturn(Collections.emptyMap());
+    }
+
+    @Test
+    void shouldNotRunWhenRefData() {
+        Mockito.when(filesArguments.getRefData("/test")).thenReturn(Map.of("test", "value"));
+        StringSchema stringSchema = new StringSchema();
+        FuzzingData data = FuzzingData.builder().path("/test").requestPropertyTypes(Collections.singletonMap("test", stringSchema)).build();
+        stringSchema.setMaximum(new BigDecimal(100));
+        Assertions.assertThat(minimumExactNumbersInNumericFieldsFuzzer.hasBoundaryDefined("test", data)).isFalse();
     }
 
     @Test
@@ -70,13 +82,22 @@ class MinimumExactNumbersInNumericFieldsFuzzerTest {
     }
 
     @Test
+    void shouldGenerateNumberBoundaryValue() {
+        IntegerSchema schema = new IntegerSchema();
+        schema.setMinimum(BigDecimal.ONE);
+        Object generated = minimumExactNumbersInNumericFieldsFuzzer.getBoundaryValue(schema);
+
+        Assertions.assertThat(generated).isInstanceOf(Number.class);
+    }
+
+    @Test
     void shouldReturn2XXForExpectedResultCodes() {
-        Assertions.assertThat(minimumExactNumbersInNumericFieldsFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualByComparingTo(ResponseCodeFamily.TWOXX);
-        Assertions.assertThat(minimumExactNumbersInNumericFieldsFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualByComparingTo(ResponseCodeFamily.TWOXX);
+        Assertions.assertThat(minimumExactNumbersInNumericFieldsFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.TWOXX);
+        Assertions.assertThat(minimumExactNumbersInNumericFieldsFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.TWOXX);
     }
 
     @ParameterizedTest
-    @CsvSource({",true", "mama,false"})
+    @CsvSource({",true", "mama,true"})
     void shouldTestBoundaryDefinedBasedOnFormat(String format, boolean expected) {
         StringSchema stringSchema = new StringSchema();
         FuzzingData data = FuzzingData.builder().requestPropertyTypes(Collections.singletonMap("test", stringSchema)).build();

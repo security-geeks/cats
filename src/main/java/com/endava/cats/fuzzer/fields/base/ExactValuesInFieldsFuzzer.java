@@ -4,11 +4,11 @@ import com.endava.cats.args.FilesArguments;
 import com.endava.cats.generator.simple.StringGenerator;
 import com.endava.cats.http.HttpMethod;
 import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
-import com.endava.cats.util.CatsUtil;
-import io.swagger.v3.oas.models.media.ByteArraySchema;
+import com.endava.cats.util.CatsModelUtils;
 import io.swagger.v3.oas.models.media.Schema;
 import org.apache.commons.lang3.StringUtils;
 
@@ -18,10 +18,22 @@ import java.util.Base64;
 import java.util.List;
 import java.util.function.Function;
 
+/**
+ * Abstract base class for fuzzers targeting exact values in fields.
+ * Extends the {@link BaseBoundaryFieldFuzzer} class and provides a constructor
+ * to initialize common dependencies for fuzzing exact values in fields.
+ */
 public abstract class ExactValuesInFieldsFuzzer extends BaseBoundaryFieldFuzzer {
 
-    protected ExactValuesInFieldsFuzzer(ServiceCaller sc, TestCaseListener lr, CatsUtil cu, FilesArguments cp) {
-        super(sc, lr, cu, cp);
+    /**
+     * Constructor for initializing common dependencies for fuzzing exact values in fields.
+     *
+     * @param sc The {@link ServiceCaller} used to make service calls.
+     * @param lr The {@link TestCaseListener} for reporting test case events.
+     * @param cp The {@link FilesArguments} for file-related arguments.
+     */
+    protected ExactValuesInFieldsFuzzer(ServiceCaller sc, TestCaseListener lr, FilesArguments cp) {
+        super(sc, lr, cp);
     }
 
     @Override
@@ -50,24 +62,43 @@ public abstract class ExactValuesInFieldsFuzzer extends BaseBoundaryFieldFuzzer 
      * @return null of the schema has proper boundaries defined or a generated string value matching the boundaries otherwise
      */
     @Override
-    public String getBoundaryValue(Schema schema) {
-        if (getExactMethod().apply(schema) == null) {
+    public Object getBoundaryValue(Schema schema) {
+        Number fromSchemaLength = getExactMethod().apply(schema);
+        if (fromSchemaLength == null) {
             logger.debug("Null value for applied boundary function!");
             return null;
         }
-        String pattern = schema.getPattern() != null ? schema.getPattern() : StringGenerator.ALPHANUMERIC_PLUS;
-
+        logger.debug("Length from schema {}", fromSchemaLength);
         /* Sometimes the regex generators will generate weird chars at the beginning or end of string.
           So we generate a larger one and substring the right size. */
-        int fromSchemaLength = getExactMethod().apply(schema).intValue();
-        int generatedStringLength = fromSchemaLength + 15;
+        try {
+            return generateWithAdjustedLength(schema, 15);
+        } catch (IllegalArgumentException e) {
+            try {
+                return generateWithAdjustedLength(schema, 0);
+            } catch (Exception ex) {
+                testCaseListener.recordError("Fuzzer %s could not generate a value for patten %s".formatted(this.getClass().getSimpleName(), schema.getPattern()));
+                return null;
+            }
+        }
+    }
+
+    private String generateWithAdjustedLength(Schema schema, int adjustedLength) {
+        Number fromSchemaLength = getExactMethod().apply(schema);
+        if (fromSchemaLength.intValue() <= 0) {
+            return "";
+        }
+        String pattern = schema.getPattern() != null ? schema.getPattern() : StringGenerator.ALPHANUMERIC_PLUS;
+
+        int fromSchemaLengthAdjusted = (fromSchemaLength.intValue() > Integer.MAX_VALUE / 100 - adjustedLength) ? Integer.MAX_VALUE / 100 : fromSchemaLength.intValue();
+        int generatedStringLength = fromSchemaLengthAdjusted + adjustedLength;
 
         String generated = StringGenerator.generateExactLength(pattern, generatedStringLength);
-        if (schema instanceof ByteArraySchema) {
+        if (CatsModelUtils.isByteArraySchema(schema)) {
             return Base64.getEncoder().encodeToString(generated.getBytes(StandardCharsets.UTF_8));
         }
-
-        return StringGenerator.sanitize(generated).substring(0, fromSchemaLength);
+        logger.debug("Generated value: {}, fromSchemaAdjusted: {}", generated, fromSchemaLengthAdjusted);
+        return generated.substring(0, fromSchemaLengthAdjusted);
     }
 
     @Override
@@ -79,12 +110,12 @@ public abstract class ExactValuesInFieldsFuzzer extends BaseBoundaryFieldFuzzer 
 
     @Override
     public ResponseCodeFamily getExpectedHttpCodeWhenRequiredFieldsAreFuzzed() {
-        return ResponseCodeFamily.TWOXX;
+        return ResponseCodeFamilyPredefined.TWOXX;
     }
 
     @Override
     public ResponseCodeFamily getExpectedHttpCodeWhenOptionalFieldsAreFuzzed() {
-        return ResponseCodeFamily.TWOXX;
+        return ResponseCodeFamilyPredefined.TWOXX;
     }
 
     @Override

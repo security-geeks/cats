@@ -2,7 +2,7 @@ package com.endava.cats.fuzzer.special;
 
 import com.endava.cats.args.FilesArguments;
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.CatsHeader;
 import com.endava.cats.model.CatsResponse;
@@ -10,7 +10,6 @@ import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseExporter;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.util.CatsDSLWords;
-import com.endava.cats.util.CatsUtil;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import io.swagger.v3.oas.models.media.IntegerSchema;
@@ -39,23 +38,21 @@ class SecurityFuzzerTest {
     private ServiceCaller serviceCaller;
     @InjectSpy
     private TestCaseListener testCaseListener;
-    private CatsUtil catsUtil;
     private CustomFuzzerUtil customFuzzerUtil;
 
     private SecurityFuzzer securityFuzzer;
 
     @BeforeEach
     void setup() {
-        catsUtil = new CatsUtil();
         serviceCaller = Mockito.mock(ServiceCaller.class);
         filesArguments = new FilesArguments();
-        customFuzzerUtil = new CustomFuzzerUtil(serviceCaller, catsUtil, testCaseListener);
+        customFuzzerUtil = new CustomFuzzerUtil(serviceCaller, testCaseListener);
         securityFuzzer = new SecurityFuzzer(filesArguments, customFuzzerUtil);
         ReflectionTestUtils.setField(testCaseListener, "testCaseExporter", Mockito.mock(TestCaseExporter.class));
     }
 
     @Test
-    void shouldThrowExceptionWhenFileDoesNotExist() throws Exception {
+    void shouldThrowExceptionWhenFileDoesNotExist() {
         ReflectionTestUtils.setField(filesArguments, "securityFuzzerFile", new File("mumu"));
 
         Assertions.assertThatThrownBy(() -> filesArguments.loadSecurityFuzzerFile()).isInstanceOf(FileNotFoundException.class);
@@ -68,11 +65,13 @@ class SecurityFuzzerTest {
         spyCustomFuzzer.fuzz(data);
 
         Mockito.verifyNoInteractions(testCaseListener);
+    }
+
+    @Test
+    void shouldOverrideMethods() {
         Assertions.assertThat(securityFuzzer.description()).isNotNull();
         Assertions.assertThat(securityFuzzer).hasToString(securityFuzzer.getClass().getSimpleName());
-        Assertions.assertThat(securityFuzzer.reservedWords()).containsOnly(CatsDSLWords.EXPECTED_RESPONSE_CODE, CatsDSLWords.DESCRIPTION, CatsDSLWords.OUTPUT, CatsDSLWords.VERIFY,
-                CatsDSLWords.STRINGS_FILE, CatsDSLWords.TARGET_FIELDS, CatsDSLWords.MAP_VALUES, CatsDSLWords.ONE_OF_SELECTION, CatsDSLWords.ADDITIONAL_PROPERTIES,
-                CatsDSLWords.ELEMENT, CatsDSLWords.HTTP_METHOD, CatsDSLWords.TARGET_FIELDS_TYPES);
+        Assertions.assertThat(securityFuzzer.requiredKeywords()).containsOnly(CatsDSLWords.EXPECTED_RESPONSE_CODE, CatsDSLWords.DESCRIPTION, CatsDSLWords.HTTP_METHOD);
     }
 
     @Test
@@ -90,7 +89,7 @@ class SecurityFuzzerTest {
         SecurityFuzzer spySecurityFuzzer = Mockito.spy(securityFuzzer);
         filesArguments.loadSecurityFuzzerFile();
         spySecurityFuzzer.fuzz(data);
-        Mockito.verifyNoInteractions(testCaseListener);
+        Mockito.verify(testCaseListener, Mockito.times(1)).recordError("is missing the following mandatory entries: [httpMethod, targetFields or targetFieldTypes]");
     }
 
     @ParameterizedTest
@@ -100,33 +99,37 @@ class SecurityFuzzerTest {
         SecurityFuzzer spySecurityFuzzer = Mockito.spy(securityFuzzer);
         filesArguments.loadSecurityFuzzerFile();
         spySecurityFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(22)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamily.TWOXX));
+        Mockito.verify(testCaseListener, Mockito.times(22)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.argThat(arg -> arg.asString().equalsIgnoreCase("200")));
     }
 
     @Test
     void givenAnInvalidSecurityFuzzerFile_whenTheFuzzerRuns_thenNoResultIsReport() throws Exception {
         FuzzingData data = setContext("src/test/resources/securityFuzzer-invalidStrings.yml", "{'name': {'first': 'Cats'}, 'id': '25'}");
-        SecurityFuzzer spySecurityFuzzer = Mockito.spy(securityFuzzer);
         filesArguments.loadSecurityFuzzerFile();
-        spySecurityFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.never()).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamily.TWOXX));
+        securityFuzzer.fuzz(data);
+        Mockito.verify(testCaseListener, Mockito.never()).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamilyPredefined.TWOXX));
     }
 
-    @Test
-    void shouldConsiderFieldsWithTypeStringWhenRunningFuzzer() throws Exception {
-        FuzzingData data = setContext("src/test/resources/securityFuzzer-fieldTypes.yml", "{'name': {'first': 'Cats'}, 'id': '25'}");
+    @ParameterizedTest
+    @CsvSource({"src/test/resources/securityFuzzer-fieldTypes.yml,88", "src/test/resources/securityFuzzer-fieldTypes-http-body.yml,22", "src/test/resources/securityFuzzer-arrays.yml,22"})
+    void shouldProperlyParseFieldTypesAndExecuteTests(String file, int expectedTestRuns) throws Exception {
+        FuzzingData data = setContext(file, "{'name': {'first': 'Cats'}, 'id': '25'}");
         data.getHeaders().add(CatsHeader.builder().name("header").value("value").build());
         SecurityFuzzer spySecurityFuzzer = Mockito.spy(securityFuzzer);
         filesArguments.loadSecurityFuzzerFile();
         spySecurityFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(88)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamily.TWOXX));
+        Mockito.verify(testCaseListener, Mockito.times(expectedTestRuns)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.argThat(arg -> arg.asString().equalsIgnoreCase("200")));
     }
 
-    private FuzzingData setContext(String fuzzerFile, String responsePayload) throws Exception {
+    private FuzzingData setContext(String fuzzerFile, String responsePayload) {
         ReflectionTestUtils.setField(filesArguments, "securityFuzzerFile", new File(fuzzerFile));
         Map<String, List<String>> responses = new HashMap<>();
         responses.put("200", Collections.singletonList("response"));
-        CatsResponse catsResponse = CatsResponse.from(200, responsePayload, "POST", 2);
+        CatsResponse catsResponse = CatsResponse.builder()
+                .responseCode(200).body(responsePayload).httpMethod("POST")
+                .responseTimeInMs(2)
+                .responseContentType("application/json")
+                .build();
         Map<String, Schema> properties = new HashMap<>();
         properties.put("firstName", new StringSchema());
         properties.put("lastName", new StringSchema());
@@ -137,9 +140,9 @@ class SecurityFuzzerTest {
         properties.put("email", email);
         ObjectSchema person = new ObjectSchema();
         person.setProperties(properties);
-        FuzzingData data = FuzzingData.builder().path("/pets/{id}/move").payload("{'name':'oldValue', 'firstName':'John','lastName':'Cats','email':'john@yahoo.com'}").
+        FuzzingData data = FuzzingData.builder().path("/pets/{id}/move").contractPath("/pets/{id}/move").payload("{'name':'oldValue', 'firstName':'John','lastName':'Cats','email':'john@yahoo.com', 'arrayField':[5,4]}").
                 responses(responses).responseCodes(Collections.singleton("200")).method(HttpMethod.POST).reqSchema(person).headers(new HashSet<>())
-                .requestContentTypes(List.of("application/json")).requestPropertyTypes(properties).build();
+                .requestContentTypes(List.of("application/json")).responseContentTypes(Collections.singletonMap("200", Collections.singletonList("application/json"))).requestPropertyTypes(properties).build();
         Mockito.when(serviceCaller.call(Mockito.any())).thenReturn(catsResponse);
 
         return data;

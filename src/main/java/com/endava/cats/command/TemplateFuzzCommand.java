@@ -12,16 +12,23 @@ import com.endava.cats.http.HttpMethod;
 import com.endava.cats.model.CatsHeader;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
+import com.endava.cats.util.ConsoleUtils;
+import com.endava.cats.util.JsonUtils;
 import com.endava.cats.util.VersionProvider;
 import com.google.common.net.HttpHeaders;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
+import io.quarkus.arc.Unremovable;
+import jakarta.inject.Inject;
+import lombok.Getter;
+import org.apache.commons.lang3.StringUtils;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import picocli.CommandLine;
 
-import jakarta.inject.Inject;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -41,9 +48,26 @@ import java.util.stream.Collectors;
         exitCodeOnInvalidInput = 191,
         exitCodeOnExecutionException = 192,
         synopsisHeading = "%nUsage: ",
+        exitCodeListHeading = "%n@|bold,underline Exit Codes:|@%n",
+        exitCodeList = {"@|bold  0|@:Successful program execution",
+                "@|bold 191|@:Usage error: user input for the command was incorrect",
+                "@|bold 192|@:Internal execution error: an exception occurred when executing command",
+                "@|bold ERR|@:Where ERR is the number of errors reported by cats"},
+        footerHeading = "%n@|bold,underline Examples:|@%n",
+        footer = {"  Run fuzz tests for a given POST request:",
+                "    cats fuzz -H header=value -X POST -d '{\"field1\":\"value1\",\"field2\":\"value2\",\"field3\":\"value3\"}' -t \"field1,field2,header\" -i \"2XX,4XX\" http://service-url ",
+                "", "  Run fuzz tests for a given GET request:",
+                "    cats fuzz -X GET -t \"path1,query1\" -i \"2XX,4XX\" http://service-url/paths1?query1=test&query2"},
         versionProvider = VersionProvider.class)
+@Unremovable
 public class TemplateFuzzCommand implements Runnable {
     private final PrettyLogger logger = PrettyLoggerFactory.getLogger(TemplateFuzzCommand.class);
+
+    /**
+     * Keyword used to mark fields to fuzz.
+     */
+    public static final String FUZZ = "FUZZ";
+
     @CommandLine.Parameters(index = "0",
             paramLabel = "<url>",
             description = "Full URL path of the service endpoint. This should include query params for non-body HTTP requests.")
@@ -82,61 +106,95 @@ public class TemplateFuzzCommand implements Runnable {
     @Inject
     TestCaseListener testCaseListener;
 
+    @Getter
+    @ConfigProperty(name = "quarkus.application.version", defaultValue = "1.0.0")
+    String appVersion;
+
     @CommandLine.Option(names = {"--headers", "-H"},
-            description = "Specifies the headers that will be passed along with the request and/or fuzzed. Default: @|bold,underline ${DEFAULT-VALUE}|@.")
+            description = "Specifies the headers that will be passed along with the request and/or fuzzed. Default: @|bold,underline ${DEFAULT-VALUE}|@")
     Map<String, String> headers = Map.of(HttpHeaders.ACCEPT, "application/json", HttpHeaders.CONTENT_TYPE, "application/json");
 
     @CommandLine.Option(names = {"--data", "-d"},
             description = "Specifies the request body used for fuzzing. The request body must be a valid request for the supplied url." +
-                    "If the value of the argument starts with @|bold @|@ it will be considered a file.")
+                    "If the value of the argument starts with @|bold @|@ it will be considered a file")
     String data;
 
     @CommandLine.Option(names = {"--httpMethod", "-X"},
-            description = "The HTTP method. For HTTP method requiring a body you must also supply a  @|bold,underline --template|@. Default: @|bold,underline ${DEFAULT-VALUE}|@.")
+            description = "The HTTP method. For HTTP methods requiring a body, a valid @|bold,underline --data|@ argument is required. Default: @|bold,underline ${DEFAULT-VALUE}|@")
     HttpMethod httpMethod = HttpMethod.POST;
 
     @CommandLine.Option(names = {"--targetFields", "-t"},
-            description = "A comma separated list of fully qualified request fields, HTTP headers, path and query parameters that the Fuzzers will apply to." +
-                    "For HTTP requests with bodies fuzzing will only run on request fields and/or HTTP headers. For HTTP request without bodies fuzzing will run on path and query parameters " +
-                    "and/or HTTP headers.", split = ",", required = true)
+            description = "A comma separated list of fully qualified request fields, HTTP headers, path and/or query parameters that the Fuzzers will apply to", split = ",")
     Set<String> targetFields;
 
     @Override
     public void run() {
         try {
-            reportingArguments.processLogData();
-            validateRequiredFields();
+            this.init();
             String payload = this.loadPayload();
             logger.debug("Resolved payload: {}", payload);
+            Set<String> fieldsToFuzz = getFieldsToFuzz(payload, url);
             FuzzingData fuzzingData = FuzzingData.builder().path(url)
                     .contractPath(url)
                     .processedPayload(payload)
                     .method(httpMethod)
                     .headers(this.getHeaders())
-                    .targetFields(targetFields)
+                    .targetFields(fieldsToFuzz)
                     .build();
 
-            beforeFuzz();
+            beforeFuzz(fuzzingData.getContractPath(), fuzzingData.getMethod().name());
             templateFuzzer.fuzz(fuzzingData);
-            afterFuzz();
+            afterFuzz(fuzzingData.getContractPath());
         } catch (IOException e) {
             logger.debug("Exception while fuzzing given data!", e);
             logger.error("Something went wrong while fuzzing. The data file does not exist or is not reachable: {}. Error message: {}", data, e.getMessage());
         }
     }
 
-    private void afterFuzz() {
-        testCaseListener.afterFuzz();
+    private void init() {
+        testCaseListener.startSession();
+        reportingArguments.processLogData();
+        ConsoleUtils.initTerminalWidth(spec);
+        validateRequiredFields();
+        testCaseListener.renderFuzzingHeader();
+    }
+
+    private Set<String> getFieldsToFuzz(String payload, String url) {
+        String fuzzKeyword = this.getFuzzKeyword(payload, url);
+
+        if (targetFields == null || targetFields.isEmpty()) {
+            if (StringUtils.isEmpty(fuzzKeyword) && !HttpMethod.requiresBody(httpMethod)) {
+                throw new CommandLine.ParameterException(spec.commandLine(), "You must provide either --targetFields or the FUZZ keyword");
+            }
+            if (StringUtils.isEmpty(fuzzKeyword)) {
+                return new HashSet<>(JsonUtils.getAllFieldsOf(payload));
+            }
+            //When FUZZ keyword is supplied, set simple replace to true in order to do a simple replace(FUZZ, fuzzValue)
+            userArguments.setSimpleReplace(true);
+            return Set.of(fuzzKeyword);
+        }
+        return targetFields;
+    }
+
+    private String getFuzzKeyword(String payload, String url) {
+        if (url.contains(FUZZ) || payload.contains(FUZZ)) {
+            return FUZZ;
+        }
+        return "";
+    }
+
+    private void afterFuzz(String path) {
+        reportingArguments.enableAdditionalLoggingIfSummary();
+        testCaseListener.afterFuzz(path);
         testCaseListener.endSession();
     }
 
-    private void beforeFuzz() throws IOException {
-        testCaseListener.startSession();
+    private void beforeFuzz(String path, String method) throws IOException {
         testCaseListener.initReportingPath();
-        testCaseListener.beforeFuzz(templateFuzzer.getClass());
+        testCaseListener.beforeFuzz(templateFuzzer.getClass(), path, method);
     }
 
-    public Set<CatsHeader> getHeaders() {
+    private Set<CatsHeader> getHeaders() {
         return headers.entrySet()
                 .stream()
                 .map(entry -> CatsHeader.builder()
@@ -149,6 +207,9 @@ public class TemplateFuzzCommand implements Runnable {
     private void validateRequiredFields() throws CommandLine.ParameterException {
         if (HttpMethod.requiresBody(httpMethod) && data == null) {
             throw new CommandLine.ParameterException(spec.commandLine(), "Missing required option --data=<data>");
+        }
+        if (!matchArguments.isAnyMatchArgumentSupplied()) {
+            throw new CommandLine.ParameterException(spec.commandLine(), "At least one --matchXXX argument is required");
         }
     }
 

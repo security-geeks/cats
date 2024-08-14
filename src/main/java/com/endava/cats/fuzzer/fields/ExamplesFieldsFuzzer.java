@@ -4,15 +4,15 @@ import com.endava.cats.annotations.FieldFuzzer;
 import com.endava.cats.fuzzer.api.Fuzzer;
 import com.endava.cats.fuzzer.executor.SimpleExecutor;
 import com.endava.cats.fuzzer.executor.SimpleExecutorContext;
-import com.endava.cats.http.ResponseCodeFamily;
-import com.endava.cats.json.JsonUtils;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
+import com.endava.cats.util.JsonUtils;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.util.ConsoleUtils;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
-
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Optional;
@@ -20,7 +20,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 /**
- * // from components.examples; from schema.example(s), MediaType.example(s) Example can be ref
+ * Fuzzer that sends examples from components.examples; from schema.example(s), MediaType.example(s) Example can be a ref.
  */
 @FieldFuzzer
 @Singleton
@@ -28,6 +28,11 @@ public class ExamplesFieldsFuzzer implements Fuzzer {
     private final PrettyLogger logger = PrettyLoggerFactory.getLogger(ExamplesFieldsFuzzer.class);
     private final SimpleExecutor simpleExecutor;
 
+    /**
+     * Creates a new ExamplesFieldsFuzzer instance.
+     *
+     * @param simpleExecutor the executor
+     */
     @Inject
     public ExamplesFieldsFuzzer(SimpleExecutor simpleExecutor) {
         this.simpleExecutor = simpleExecutor;
@@ -57,7 +62,7 @@ public class ExamplesFieldsFuzzer implements Fuzzer {
                     .fuzzer(this)
                     .fuzzingData(data)
                     .scenario("Send a request for every unique example")
-                    .expectedResponseCode(ResponseCodeFamily.TWOXX)
+                    .expectedResponseCode(ResponseCodeFamilyPredefined.TWOXX)
                     .expectedSpecificResponseCode("2XX")
                     .build()
             );

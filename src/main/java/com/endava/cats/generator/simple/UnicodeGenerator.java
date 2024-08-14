@@ -1,17 +1,25 @@
 package com.endava.cats.generator.simple;
 
+import com.endava.cats.util.CatsUtil;
+import lombok.Getter;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
+/**
+ * Holds fuzzing payloads focused on unicode characters fuzzing.
+ */
 public abstract class UnicodeGenerator {
 
     private static final List<String> INVALID_REFERENCES = List.of("?", "??", "/?/", "\u0000", "\u200B", "%", "&", "/.. ;/",
             "../", ".. /", ".. ;/", "%5c..%5c.%5c", ".././", "%09", "..%00/", "..%0d/", "..%5c/", "..%ff/", ";.json", ".json");
     private static final String ZALGO_TEXT = " ̵̡̡̢̡̨̨̢͚̬̱̤̰̗͉͚̖͙͎͔͔̺̳͕̫̬͚̹͖̬̭̖̪̗͕̜̣̥̣̼͍͉̖͍̪͈̖͚̙͛͒͂̎̊̿̀̅̈͌͋̃̾̈̾̇͛͌͘͜͜͠͝ͅͅͅ ̷͕̗̇͛̅̀̑̇̈͗͌͛̐̀͆̐̊̅̋̈́̂̈́̈́͑̓͂͂̌̈́̽͌͐̐͂͐̈́̍̂͗̂͘͠͝͝͝ͅ ̷̨̢̧̢̡̨̛͕̯̭̹͖̮̘̤̩̥̟̖͈̯̠̖͈̜͈̥̫͔̘̭͉͎͇̤̦̯͙̹̠̼̮͕̲̖̟̲̦̣͇̳͖̳̭͇͓̭͌̓̀̅̋̋̀̈́̎̄͛̾̊͐̎̉̏͊͐̑͊͒̐̔̏̔̋̑̌͆̏̀̉͆̆́̓̆̉̀̒̆̆̉̀̂̎̈̔͗̔̕̕͘̕̚̚̕͘͜͝͝͝͝͝͠ͅ ̷̧̡̥͈͓͙͈̫͙͎͈̻̔̊̎̏̑̒̐̐̆̉̍͠͝͝ ̴̡̛̛͓͎͇̘͈͇̱̟̠̳͇̬̺̲̭̪̬̼̝̠̙̹̩̱̪͔͉͎̱͚͍̬͈̤͈͙͖̝̲̦̞̺̟̟̺͇̳͈̠̘̺̪̱̮̉̀̍̏̐̃̅̐̊̾͆̐͋͊̿̉̆̾͊̀͊͒͌̀͛̎́́͂̐͂̎͛̆͜͜͜͠ͅ ̶̧̧͖̻̥̝̺̼̙̫̩̹̣̲̩̲͍̺̘͕̤͉̹̥͉̮̮̟̘̥̺̯̗̠͈̬͚̦̦͚̫̫̦̉́̾̀̅͋̋̇̕̕͜͜͝ͅͅ ̶̧̛̛̝̟̤̬̙͔̻͙͚̹̣̳̳͔̥̘̠̗̦̠͚͎̖̮̳̗̥̫͚̯̬̩̎́̽͒̋̓̀͂̈́̓́̎͐͊͒̎͒͌̿̿̔͐̈́͑̊̄̓̎͐̓̓̍͘̕̚̚͜͜ ̶̢̡̡̨̡̡̘̫̫̠̟̻̳̻͈̲̖͚͇̼̩̥̥͎̥̯͚̞̘̼̞͍̮̗͈̱͚͙̠͔̞̮̱̭͍͍̪̲̜͓͍̣̯̲̠̲̤̅͊̑̇̆́̈́̓̿̄̐̓̐͐́͛̆͜͝͝͝͠ͅ ̶̧̡̨̧̡̧̥̥̱̪͇̞̭͙͚͔̜̠͓͈̞͈̣̹̝̩̦̟̻̰͙̯̼̜̞̮̬̝͚̺̟͎̻̱̙̦̜̭̲̰͎̳̣̈͜͜͜ͅ ̸̹̟̯̝͚̪̼͓͕͕̹͖̣̠͓̫͇͚͔̼̊́͑̊̊̅͗͠ͅ";
+    @Getter
     private static final List<String> spacesHeaders = Arrays.asList(" ", "\u0009");
     private static final List<String> whitespacesHeaders = Arrays.asList(
             "\u1680", "\u2000", "\u2001", "\u2002", "\u2003", "\u2004", "\u2005", "\u2006", "\u2007", "\u2008", "\u2009",
@@ -19,12 +27,14 @@ public abstract class UnicodeGenerator {
     private static final List<String> whitespacesFields = Arrays.asList(
             " ", "\u1680", "\u2000", "\u2001", "\u2002", "\u2003", "\u2004", "\u2005", "\u2006",
             "\u2007", "\u2008", "\u2009", "\u200A", "\u2028", "\u2029", "\u202F", "\u205F", "\u3000", "\u00A0");
+    @Getter
     private static final List<String> controlCharsHeaders = Arrays.asList(
             "\r\n", "\u0000", "\u0007", "\u0008", "\n", "\u000B", "\u000C", "\r", "\u200B", "\u200C", "\u200D", "\u200E",
             "\u200F", "\u202A", "\u202B", "\u202C", "\u202D", "\u202E", "\u2060", "\u2061", "\u2062", "\u2063", "\u2064", "\u206D", "\u0015",
             "\u0016", "\u0017", "\u0018", "\u0019", "\u001A", "\u001B", "\u001C", "\u001D", "\u001E", "\u001F", "\u007F", "\u0080", "\u0081",
             "\u0082", "\u0083", "\u0085", "\u0086", "\u0087", "\u0088", "\u008A", "\u008B", "\u008C", "\u008D", "\u0090", "\u0091", "\u0093",
             "\u0094", "\u0095", "\u0096", "\u0097", "\u0098", "\u0099", "\u009A", "\u009B", "\u009C", "\u009D", "\u009E", "\u009F", "\uFEFF", "\uFFFE", "\u00AD");
+    @Getter
     private static final List<String> controlCharsFields = Stream.concat(controlCharsHeaders.stream(), Stream.of("\u0009")).toList();
 
     private static final String BAD_PAYLOAD = "퀜\uD80C\uDE1B\uD859\uDCBC\uD872\uDC4F璫骋\uD85B\uDC0F\uD842\uDF46\uD85D\uDC7C\uD85C\uDC71\uD884\uDC2E\uD854\uDCA4\uD861\uDE98ྶ\uD85E\uDCD4ᠰ\uD86F\uDC65榬\uD849\uDC0D" +
@@ -67,10 +77,45 @@ public abstract class UnicodeGenerator {
             "\uD870\uDFBC\uD858\uDE7D\uD807\uDFEBᡨ\uD86C\uDE32⨪鍔\uD81F\uDFBF\uD85F\uDC4A\uD872\uDC7C뜕\uD85F\uDEE7踋\uD851\uDC1D\uD84D\uDFC0\uD82C\uDCCA\uD803\uDD1A譿\uD864\uDFA6\uD853\uDEF0\uD846" +
             "\uDC4E䢟\uD85A\uDF77\uD85F\uDD63\uD868\uDED4\uD86D\uDEC6룐\uD822\uDCEA\uD807\uDFCB\uD82C\uDC7C\uD83E\uDD2B";
 
+    @Getter
     private static final List<String> singleCodePointEmojis = Arrays.asList("\uD83E\uDD76", "\uD83D\uDC80", "\uD83D\uDC7B", "\uD83D\uDC7E");
+
+    @Getter
     private static final List<String> multiCodePointEmojis = Arrays.asList("\uD83D\uDC69\uD83C\uDFFE", "\uD83D\uDC68\u200D\uD83C\uDFED️", "\uD83D\uDC69\u200D\uD83D\uDE80");
 
+    @Getter
     private static final List<String> abugidasChars = List.of("జ్ఞ\u200Cా", "স্র\u200Cু");
+
+    private static final List<String> ZW_CHARS_SMALL_LIST_HEADERS = List.of("\u200B", "\u200C", "\u200D", "\u200E", "\u200F",
+            "\u202A", "\u202B", "\u202C", "\u202D", "\u202E", "\u202F");
+
+    private static final List<String> ZW_CHARS_SMALL_LIST_FIELDS = List.of("\u200B", "\u200C", "\u200D", "\u200F", "\u202B", "\u202E");
+
+    private static final List<String> INVALID_JSONS = List.of("{0}", "{0.0}", "[{}]", "{$}", "[]", "{}",
+            """ 
+                    {"circularRef": {"self": {"$ref": "#/circularRef"}}} \
+                    """,
+            """
+                    {"backslash": "\\"} \
+                    """,
+            """
+                    {"ünicode": "ünicode"} \
+                    """,
+            """
+                    "{"unexpected" $ "token": "value"} \
+                    """,
+            """
+                    {\u0000:\u0000} \
+                    """,
+            """
+                    {"\u0000":"\u0000"} \
+                    """,
+            """
+                    {"␀":"␀"} \
+                    """,
+            """
+                    {␀:␀} \
+                    """);
 
     private UnicodeGenerator() {
         //ntd
@@ -104,48 +149,95 @@ public abstract class UnicodeGenerator {
         return result;
     }
 
-    public static List<String> getAbugidasChars() {
-        return abugidasChars;
-    }
-
-    public static List<String> getControlCharsFields() {
-        return controlCharsFields;
-    }
-
-    public static List<String> getControlCharsHeaders() {
-        return controlCharsHeaders;
-    }
-
+    /**
+     * Gets a list of payload with unicode separators for field fuzzing.
+     *
+     * @return A list of payloads with unicode separators to be used for field fuzzing.
+     */
     public static List<String> getSeparatorsFields() {
         return whitespacesFields;
     }
 
+    /**
+     * Gets a list of payload with unicode separators for headers fuzzing.
+     *
+     * @return A list of payloads with unicode separators to be used for headers fuzzing.
+     */
     public static List<String> getSeparatorsHeaders() {
         return whitespacesHeaders;
     }
 
-    public static List<String> getSpacesHeaders() {
-        return spacesHeaders;
-    }
-
-    public static List<String> getSingleCodePointEmojis() {
-        return singleCodePointEmojis;
-    }
-
-    public static List<String> getMultiCodePointEmojis() {
-        return multiCodePointEmojis;
-    }
-
-
+    /**
+     * A payload with specific unicode characters.
+     *
+     * @return A payload with specific unicode characters.
+     */
     public static String getBadPayload() {
         return BAD_PAYLOAD;
     }
 
+    /**
+     * Gets a list of payload with invalid references for field fuzzing.
+     *
+     * @return A list of payloads with invalid references to be used for field fuzzing.
+     */
     public static List<String> getInvalidReferences() {
         return INVALID_REFERENCES;
     }
 
+    /**
+     * Gets the Zalgo text without spaces.
+     *
+     * @return The Zalgo text without spaces.
+     */
     public static String getZalgoText() {
         return ZALGO_TEXT.replace(" ", "");
+    }
+
+    /**
+     * Returns a list with invalid json payloads.
+     *
+     * @return A list with invalid json payloads
+     */
+    public static List<String> getInvalidJsons() {
+        return INVALID_JSONS;
+    }
+
+    /**
+     * Gets a list of zero width characters.
+     *
+     * @return A list of zero width characters.
+     */
+    public static List<String> getZwCharsSmallListHeaders() {
+        return ZW_CHARS_SMALL_LIST_HEADERS;
+    }
+
+    /**
+     * Gets a list of zero width characters.
+     *
+     * @return A list of zero width characters.
+     */
+    public static List<String> getZwCharsSmallListFields() {
+        return ZW_CHARS_SMALL_LIST_FIELDS;
+    }
+
+    /**
+     * Generates a random unicode string of given length matching the given predicate.
+     *
+     * @param length    the length of the string to be generated
+     * @param predicate the predicate to test when generating chars
+     * @return a string of given length with all chars passing given predicate
+     */
+    public static String generateRandomUnicodeString(int length, Predicate<Character> predicate) {
+        StringBuilder stringBuilder = new StringBuilder();
+        for (int i = 0; i < length; i++) {
+            char randomChar;
+            do {
+                // Generate a random char value
+                randomChar = (char) CatsUtil.random().nextInt(Character.MAX_VALUE);
+            } while (!predicate.test(randomChar));
+            stringBuilder.append(randomChar);
+        }
+        return stringBuilder.toString();
     }
 }

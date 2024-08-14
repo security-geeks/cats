@@ -9,21 +9,34 @@ import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.servers.Server;
 import io.swagger.v3.oas.models.tags.Tag;
+import jakarta.inject.Singleton;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.CollectionUtils;
 
-import jakarta.inject.Singleton;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+/**
+ * Checks if specific top level elements are present in the OpenAPI spec.
+ */
 @LinterFuzzer
 @Singleton
 public class TopLevelElementsLinterFuzzer extends BaseLinterFuzzer {
     private final PrettyLogger log = PrettyLoggerFactory.getLogger(this.getClass());
+    private static final String DESCRIPTION = "description";
+    private static final String IS_EMPTY = " is empty";
+    private static final String IS_TOO_SHORT = " is too short";
+    private static final String COMMA = ", ";
+    private static final String EMPTY = "";
 
+    /**
+     * Creates a new TopLevelElementsLinterFuzzer instance.
+     *
+     * @param tcl the test case listener
+     */
     public TopLevelElementsLinterFuzzer(TestCaseListener tcl) {
         super(tcl);
     }
@@ -32,8 +45,6 @@ public class TopLevelElementsLinterFuzzer extends BaseLinterFuzzer {
     public void process(FuzzingData data) {
         testCaseListener.addScenario(log, "Check if the OpenAPI contract defines elements such as tags, info, external docs and servers");
         testCaseListener.addExpectedResult(log, "Elements should be present and provide meaningful information");
-        testCaseListener.addPath("NA");
-        testCaseListener.addContractPath("NA");
         StringBuilder errorString = new StringBuilder();
 
         Set<String> missingFieldsSet = this.checkInfo(data.getOpenApi().getInfo());
@@ -47,7 +58,7 @@ public class TopLevelElementsLinterFuzzer extends BaseLinterFuzzer {
         }
 
         if (!missingFieldsSet.isEmpty()) {
-            errorString.append(String.format("The following elements are missing: %s. ", missingFieldsSet.toString()));
+            errorString.append(String.format("The following elements are missing: %s. ", missingFieldsSet));
         }
 
         if (errorString.toString().isEmpty()) {
@@ -55,6 +66,8 @@ public class TopLevelElementsLinterFuzzer extends BaseLinterFuzzer {
         } else {
             testCaseListener.reportResultError(log, data, "Missing top level elements", errorString.toString());
         }
+        testCaseListener.addPath("NA");
+        testCaseListener.addContractPath("NA");
     }
 
     private String checkElement(String element, String errors) {
@@ -65,7 +78,7 @@ public class TopLevelElementsLinterFuzzer extends BaseLinterFuzzer {
         return EMPTY;
     }
 
-    public String inspectServers(List<Server> servers) {
+    private String inspectServers(List<Server> servers) {
         StringBuilder builder = new StringBuilder();
 
         for (Server server : servers) {
@@ -78,7 +91,7 @@ public class TopLevelElementsLinterFuzzer extends BaseLinterFuzzer {
         return StringUtils.stripStart(builder.toString().trim(), ",");
     }
 
-    public String inspectTags(List<Tag> tags) {
+    private String inspectTags(List<Tag> tags) {
         StringBuilder builder = new StringBuilder();
 
         for (Tag tag : tags) {
@@ -123,7 +136,7 @@ public class TopLevelElementsLinterFuzzer extends BaseLinterFuzzer {
                 .map(field -> "info." + field).collect(Collectors.toSet());
     }
 
-    public Set<String> checkContact(Contact contact) {
+    private Set<String> checkContact(Contact contact) {
         if (contact == null) {
             return Set.of("contact.email", "contact.name", "contact.url");
         }
@@ -135,6 +148,13 @@ public class TopLevelElementsLinterFuzzer extends BaseLinterFuzzer {
 
         return missingFields.stream().filter(field -> !field.isEmpty())
                 .map(field -> "contact." + field).collect(Collectors.toSet());
+    }
+
+    private <T> String getOrEmpty(Supplier<T> function, String toReturn) {
+        if (function.get() == null) {
+            return toReturn;
+        }
+        return EMPTY;
     }
 
     @Override

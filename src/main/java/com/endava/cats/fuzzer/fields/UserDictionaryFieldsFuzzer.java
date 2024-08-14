@@ -14,17 +14,28 @@ import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
 import io.swagger.v3.oas.models.media.Schema;
 import jakarta.inject.Singleton;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.function.BiFunction;
 
+/**
+ * Fuzzer that uses a user dictionary for fuzzing request fields.
+ */
 @Singleton
 @FieldFuzzer
 public class UserDictionaryFieldsFuzzer implements Fuzzer {
-    protected final PrettyLogger logger = PrettyLoggerFactory.getLogger(getClass());
+    private final PrettyLogger logger = PrettyLoggerFactory.getLogger(getClass());
     private final FieldsIteratorExecutor catsExecutor;
     private final UserArguments userArguments;
     private final MatchArguments matchArguments;
 
+    /**
+     * Creates a new UserDictionaryFieldsFuzzer instance.
+     *
+     * @param ce the executor
+     * @param ua to get the user dictionary
+     * @param ma to get matching criteria for responses
+     */
     public UserDictionaryFieldsFuzzer(FieldsIteratorExecutor ce, UserArguments ua, MatchArguments ma) {
         this.catsExecutor = ce;
         this.userArguments = ua;
@@ -36,9 +47,9 @@ public class UserDictionaryFieldsFuzzer implements Fuzzer {
         if (userArguments.getWords() == null) {
             logger.error("Skipping fuzzer as --words was not provided!");
         } else if (!matchArguments.isAnyMatchArgumentSupplied()) {
-            logger.error("Skipping fuzzer as no --m* argument was provided!");
+            logger.error("Skipping fuzzer as no --matchXXX argument was provided!");
         } else {
-            BiFunction<Schema<?>, String, List<String>> fuzzedValueProducer = (schema, field) -> userArguments.getWordsAsList();
+            BiFunction<Schema<?>, String, List<Object>> fuzzedValueProducer = (schema, field) -> Collections.singletonList(userArguments.getWordsAsList());
 
             catsExecutor.execute(
                     FieldsIteratorExecutorContext.builder()

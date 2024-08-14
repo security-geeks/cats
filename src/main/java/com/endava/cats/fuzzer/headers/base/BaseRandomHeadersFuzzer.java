@@ -1,9 +1,10 @@
 package com.endava.cats.fuzzer.headers.base;
 
+import com.endava.cats.args.ProcessingArguments;
 import com.endava.cats.fuzzer.api.Fuzzer;
 import com.endava.cats.fuzzer.executor.SimpleExecutor;
 import com.endava.cats.fuzzer.executor.SimpleExecutorContext;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.model.CatsHeader;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
@@ -17,22 +18,38 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
 
+/**
+ * Base class for random headers fuzzers.
+ */
 public abstract class BaseRandomHeadersFuzzer implements Fuzzer {
-    private static final int NUMBER_OF_HEADERS = 10000;
     private final PrettyLogger logger = PrettyLoggerFactory.getLogger(BaseRandomHeadersFuzzer.class);
     private final SimpleExecutor simpleExecutor;
     private final TestCaseListener testCaseListener;
 
-    protected BaseRandomHeadersFuzzer(SimpleExecutor simpleExecutor, TestCaseListener testCaseListener) {
+    protected final ProcessingArguments processingArguments;
+
+    /**
+     * Constructs a new instance of BaseRandomHeadersFuzzer with protected access.
+     *
+     * <p>This base fuzzer is intended for fuzzing scenarios involving random headers.
+     * It utilizes a SimpleExecutor for executing fuzzing, relies on a TestCaseListener for handling test case events,
+     * and takes ProcessingArguments into account for additional processing.</p>
+     *
+     * @param simpleExecutor      The SimpleExecutor responsible for executing fuzzing with random headers.
+     * @param testCaseListener    The TestCaseListener instance responsible for handling test case events.
+     * @param processingArguments The ProcessingArguments containing additional parameters for header fuzzing.
+     */
+    protected BaseRandomHeadersFuzzer(SimpleExecutor simpleExecutor, TestCaseListener testCaseListener, ProcessingArguments processingArguments) {
         this.simpleExecutor = simpleExecutor;
         this.testCaseListener = testCaseListener;
+        this.processingArguments = processingArguments;
     }
 
     @Override
     public void fuzz(FuzzingData data) {
         List<CatsHeader> headers = new ArrayList<>(data.getHeaders());
 
-        for (int i = 0; i < NUMBER_OF_HEADERS; i++) {
+        for (int i = 0; i < processingArguments.getRandomHeadersNumber(); i++) {
             headers.add(CatsHeader.builder()
                     .name(RandomStringUtils.randomAlphanumeric(10))
                     .required(false)
@@ -42,23 +59,24 @@ public abstract class BaseRandomHeadersFuzzer implements Fuzzer {
         simpleExecutor.execute(
                 SimpleExecutorContext.builder()
                         .fuzzingData(data)
-                        .expectedSpecificResponseCode("4XX or 2XX")
+                        .expectedResponseCode(ResponseCodeFamilyPredefined.FOURXX)
                         .fuzzer(this)
                         .logger(logger)
-                        .scenario("Add 10 000 extra random headers.")
+                        .scenario(String.format("Add %s extra random headers.", processingArguments.getRandomHeadersNumber()))
                         .responseProcessor(this::checkResponse)
                         .headers(headers)
                         .build()
         );
     }
 
-    public void checkResponse(CatsResponse response, FuzzingData data) {
-        if (ResponseCodeFamily.is2xxCode(response.getResponseCode()) || ResponseCodeFamily.is4xxCode(response.getResponseCode())) {
+    private void checkResponse(CatsResponse response, FuzzingData data) {
+        if (ResponseCodeFamilyPredefined.FOURXX.matchesAllowedResponseCodes(String.valueOf(response.getResponseCode()))) {
             testCaseListener.reportResultInfo(logger, data, "Request returned as expected for http method [{}] with response code [{}]",
                     response.getHttpMethod(), response.getResponseCode());
         } else {
             testCaseListener.reportResultError(logger, data, "Unexpected Response Code: %s".formatted(response.getResponseCode()),
-                    "Request failed unexpectedly for http method [{}]: expected [{}], actual [{}]", response.getHttpMethod(), "2XX or 4XX", response.getResponseCode());
+                    "Request failed unexpectedly for http method [{}]: expected {}, actual [{}]", response.getHttpMethod(),
+                    ResponseCodeFamilyPredefined.FOURXX.allowedResponseCodes(), response.getResponseCode());
         }
     }
 

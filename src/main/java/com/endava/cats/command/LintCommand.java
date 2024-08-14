@@ -3,17 +3,16 @@ package com.endava.cats.command;
 import com.endava.cats.args.NamingArguments;
 import com.endava.cats.args.ReportingArguments;
 import com.endava.cats.util.VersionProvider;
-import picocli.CommandLine;
-
-import jakarta.enterprise.context.Dependent;
+import io.quarkus.arc.Unremovable;
 import jakarta.inject.Inject;
+import picocli.CommandLine;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * This is responsible to run all @ContractFuzzers
+ * This is responsible to run all @ContractFuzzers.
  */
 @CommandLine.Command(
         name = "lint",
@@ -23,9 +22,19 @@ import java.util.Optional;
         abbreviateSynopsis = true,
         exitCodeOnInvalidInput = 191,
         exitCodeOnExecutionException = 192,
+        exitCodeListHeading = "%n@|bold,underline Exit Codes:|@%n",
+        exitCodeList = {"@|bold  0|@:Successful program execution",
+                "@|bold 191|@:Usage error: user input for the command was incorrect",
+                "@|bold 192|@:Internal execution error: an exception occurred when executing command",
+                "@|bold ERR|@:Where ERR is the number of errors reported by cats"},
+        footerHeading = "%n@|bold,underline Examples:|@%n",
+        footer = {"  Lint an OpenAPI contract:",
+                "    cats lint -c openapi.yml",
+                "", "  Lint an OpenAPI contract and set expected naming convention for JSON objects to camelCase:",
+                "    cats lint -c openapi.yml --jsonObjectsNaming CAMEL"},
         synopsisHeading = "%nUsage: ",
         versionProvider = VersionProvider.class)
-@Dependent
+@Unremovable
 public class LintCommand implements Runnable, CommandLine.IExitCodeGenerator {
 
     @Inject
@@ -37,11 +46,11 @@ public class LintCommand implements Runnable, CommandLine.IExitCodeGenerator {
     NamingArguments namingArguments;
 
     @CommandLine.Option(names = {"-c", "--contract"},
-            description = "The OpenAPI contract")
+            description = "The OpenAPI contract/spec")
     private String contract;
 
     @CommandLine.Option(names = {"--skipFuzzers"},
-            description = "A comma separated list of fuzzers you want to ignore. You can use full or partial Fuzzer names", split = ",")
+            description = "A comma separated list of fuzzers to be ignored. They can be full or partial Fuzzer names", split = ",")
     private List<String> skipFuzzers;
 
     @CommandLine.ParentCommand
@@ -51,10 +60,11 @@ public class LintCommand implements Runnable, CommandLine.IExitCodeGenerator {
     @Override
     public void run() {
         catsCommand.apiArguments.setContract(contract);
-        catsCommand.apiArguments.setServer("empty");
+        catsCommand.apiArguments.setServer("http://empty");
         catsCommand.filterArguments.customFilter("Linter");
         catsCommand.filterArguments.getSkipFuzzers().addAll(Optional.ofNullable(skipFuzzers).orElse(Collections.emptyList()));
         catsCommand.filterArguments.getCheckArguments().setIncludeContract(true);
+        catsCommand.processingArguments.setFilterXxxFromRequestPayloads(false);
         catsCommand.run();
     }
 

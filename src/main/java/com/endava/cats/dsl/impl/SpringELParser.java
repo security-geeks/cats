@@ -3,7 +3,6 @@ package com.endava.cats.dsl.impl;
 import com.endava.cats.dsl.api.Parser;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
-import org.jetbrains.annotations.Nullable;
 import org.springframework.context.expression.MapAccessor;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
@@ -22,6 +21,11 @@ public class SpringELParser implements Parser {
     private final PrettyLogger log = PrettyLoggerFactory.getLogger(this.getClass());
     private final SpelExpressionParser spelExpressionParser;
 
+    /**
+     * Initializes a new instance of the {@code SpringELParser} class.
+     * Constructs a {@link org.springframework.expression.spel.standard.SpelExpressionParser SpelExpressionParser}
+     * to be used for parsing Spring Expression Language (SpEL) expressions.
+     */
     public SpringELParser() {
         spelExpressionParser = new SpelExpressionParser();
     }
@@ -29,17 +33,16 @@ public class SpringELParser implements Parser {
     @Override
     public String parse(String expression, Map<String, String> context) {
         log.trace("Parsing {}", expression);
-        Object result = parseContext(expression, context);
+        Object result = parseExpressionWithContext(expression, context);
 
         if (expression.equalsIgnoreCase(String.valueOf(result))) {
-            result = parseContext(expression, context.getOrDefault(Parser.RESPONSE, null));
+            result = parseExpressionWithContext(expression, context.getOrDefault(Parser.RESPONSE, null));
         }
 
         return result == null ? expression : String.valueOf(result);
     }
 
-    @Nullable
-    private Object parseContext(String expression, Object context) {
+    private Object parseExpressionWithContext(String expression, Object context) {
         try {
             StandardEvaluationContext evaluationContext = new StandardEvaluationContext(context);
             evaluationContext.setPropertyAccessors(List.of(new MapAccessor(), new JsonPropertyAccessor()));

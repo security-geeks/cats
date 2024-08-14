@@ -1,7 +1,7 @@
 package com.endava.cats.io.util;
 
 
-import com.endava.cats.model.KeyValuePair;
+import com.endava.cats.util.KeyValuePair;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.ToString;
@@ -56,6 +56,8 @@ public final class HttpContent {
 
     /**
      * The request's content, as a string.
+     *
+     * @return the content as string
      */
     public String stringContent() {
         return new String(this.byteArrayContent, StandardCharsets.UTF_8);
@@ -68,6 +70,7 @@ public final class HttpContent {
      * @param nameValueCollection the collection of name/value tuples to encode
      * @return the encoded HttpContent instance
      * @throws IllegalArgumentException if nameValueCollection is null
+     * @throws IOException              if some IO exception happens
      */
     public static HttpContent buildMultipartFormDataContent(Collection<KeyValuePair<String, Object>> nameValueCollection) throws IOException {
         String boundary = UUID.randomUUID().toString();
@@ -82,6 +85,7 @@ public final class HttpContent {
      * @param boundary            the boundary
      * @return the encoded HttpContent instance
      * @throws IllegalArgumentException if nameValueCollection is null
+     * @throws IOException              if some IO exception happens
      */
     public static HttpContent buildMultipartFormDataContent(Collection<KeyValuePair<String, Object>> nameValueCollection, String boundary) throws IOException {
         requireNonNull(nameValueCollection);
@@ -91,12 +95,10 @@ public final class HttpContent {
             for (KeyValuePair<String, Object> entry : nameValueCollection) {
                 String key = entry.getKey();
                 Object value = entry.getValue();
-                if (value instanceof File file) {
-                    multipartProcessor.addFileField(key, file.getName(), new FileInputStream(file));
-                } else if (value instanceof InputStream inputStream) {
-                    multipartProcessor.addFileField(key, "blob", inputStream);
-                } else {
-                    multipartProcessor.addFormField(key, (String) value);
+                switch (value) {
+                    case File file -> multipartProcessor.addFileField(key, file.getName(), new FileInputStream(file));
+                    case InputStream inputStream -> multipartProcessor.addFileField(key, "blob", inputStream);
+                    default -> multipartProcessor.addFormField(key, (String) value);
                 }
             }
             return new HttpContent(baos.toByteArray(), String.format("multipart/form-data; boundary=%s", boundary));

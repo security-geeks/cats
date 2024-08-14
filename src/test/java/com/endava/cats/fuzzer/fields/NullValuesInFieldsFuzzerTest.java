@@ -1,14 +1,13 @@
 package com.endava.cats.fuzzer.fields;
 
 import com.endava.cats.args.FilesArguments;
-import com.endava.cats.args.IgnoreArguments;
+import com.endava.cats.args.FilterArguments;
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseExporter;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.strategy.FuzzingStrategy;
-import com.endava.cats.util.CatsUtil;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import org.assertj.core.api.Assertions;
@@ -22,25 +21,23 @@ import java.util.Set;
 
 @QuarkusTest
 class NullValuesInFieldsFuzzerTest {
-    private IgnoreArguments ignoreArguments;
+    private FilterArguments filterArguments;
     @InjectSpy
     private TestCaseListener testCaseListener;
     private NullValuesInFieldsFuzzer nullValuesInFieldsFuzzer;
     private FilesArguments filesArguments;
-    private CatsUtil catsUtil;
 
     @BeforeEach
     void setup() {
-        ignoreArguments = Mockito.mock(IgnoreArguments.class);
+        filterArguments = Mockito.mock(FilterArguments.class);
         filesArguments = Mockito.mock(FilesArguments.class);
-        catsUtil = Mockito.mock(CatsUtil.class);
-        nullValuesInFieldsFuzzer = new NullValuesInFieldsFuzzer(null, testCaseListener, catsUtil, filesArguments, ignoreArguments);
+        nullValuesInFieldsFuzzer = new NullValuesInFieldsFuzzer(null, testCaseListener, filesArguments, filterArguments);
         ReflectionTestUtils.setField(testCaseListener, "testCaseExporter", Mockito.mock(TestCaseExporter.class));
     }
 
     @Test
     void shouldNotRunForSkippedFields() {
-        Mockito.when(ignoreArguments.getSkipFields()).thenReturn(Collections.singletonList("id"));
+        Mockito.when(filterArguments.getSkipFields()).thenReturn(Collections.singletonList("id"));
         Assertions.assertThat(nullValuesInFieldsFuzzer.skipForFields()).containsOnly("id");
         FuzzingData data = Mockito.mock(FuzzingData.class);
         Mockito.when(data.getAllFieldsByHttpMethod()).thenReturn(Set.of("id"));
@@ -52,7 +49,7 @@ class NullValuesInFieldsFuzzerTest {
 
     @Test
     void shouldReturnExpectedResultCode2xx() {
-        Assertions.assertThat(nullValuesInFieldsFuzzer.getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern()).isEqualTo(ResponseCodeFamily.TWOXX);
+        Assertions.assertThat(nullValuesInFieldsFuzzer.getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern()).isEqualTo(ResponseCodeFamilyPredefined.TWOXX);
     }
 
     @Test

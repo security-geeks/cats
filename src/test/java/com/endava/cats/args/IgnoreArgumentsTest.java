@@ -5,6 +5,8 @@ import io.quarkus.test.junit.QuarkusTest;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
@@ -27,23 +29,6 @@ class IgnoreArgumentsTest {
         Assertions.assertThat(ignoredCodes).containsOnly("200", "4XX");
     }
 
-    @Test
-    void shouldReturnSkippedFields() {
-        ReflectionTestUtils.setField(ignoreArguments, "skipFields", List.of("field1", "field2"));
-
-        List<String> skipFields = ignoreArguments.getSkipFields();
-        Assertions.assertThat(skipFields).containsOnly("field1", "field2");
-    }
-
-    @Test
-    void shouldReturnEmptySkipFields() {
-        Assertions.assertThat(ignoreArguments.getSkipFields()).isEmpty();
-    }
-
-    @Test
-    void shouldReturnEmptySkipHeaders() {
-        Assertions.assertThat(ignoreArguments.getSkipHeaders()).isEmpty();
-    }
 
     @Test
     void shouldMatchIgnoredResponseCodes() {
@@ -54,10 +39,11 @@ class IgnoreArgumentsTest {
         Assertions.assertThat(ignoreArguments.isIgnoredResponseCode("404")).isFalse();
     }
 
-    @Test
-    void shouldMatchIgnoredResponseCodesWhenBlackbox() {
+    @ParameterizedTest
+    @CsvSource({"200,true", "501,true", "500,false", "400,true", "503,false"})
+    void shouldMatchIgnoredResponseCodesWhenBlackbox(String responseCode, boolean expected) {
         ReflectionTestUtils.setField(ignoreArguments, "blackbox", true);
-        Assertions.assertThat(ignoreArguments.isIgnoredResponseCode("200")).isTrue();
+        Assertions.assertThat(ignoreArguments.isIgnoredResponseCode(responseCode)).isEqualTo(expected);
     }
 
     @Test

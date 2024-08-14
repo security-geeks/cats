@@ -8,37 +8,35 @@ import com.endava.cats.args.ProcessingArguments;
 import com.endava.cats.context.CatsGlobalContext;
 import com.endava.cats.dsl.CatsDSLParser;
 import com.endava.cats.dsl.api.Parser;
-import com.endava.cats.exception.CatsException;
 import com.endava.cats.http.HttpMethod;
 import com.endava.cats.io.util.FormEncoder;
-import com.endava.cats.json.JsonUtils;
 import com.endava.cats.model.CatsRequest;
 import com.endava.cats.model.CatsResponse;
-import com.endava.cats.model.KeyValuePair;
+import com.endava.cats.openapi.OpenApiUtils;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.strategy.FuzzingStrategy;
 import com.endava.cats.util.CatsDSLWords;
 import com.endava.cats.util.CatsUtil;
+import com.endava.cats.util.JsonUtils;
+import com.endava.cats.util.KeyValuePair;
 import com.endava.cats.util.WordUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.html.HtmlEscapers;
 import com.google.common.net.HttpHeaders;
 import com.google.common.util.concurrent.RateLimiter;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.google.gson.JsonPrimitive;
 import com.jayway.jsonpath.PathNotFoundException;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import net.minidev.json.JSONValue;
 import okhttp3.ConnectionPool;
 import okhttp3.Headers;
 import okhttp3.HttpUrl;
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -75,8 +73,8 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.LongStream;
 
-import static com.endava.cats.json.JsonUtils.NOT_SET;
 import static com.endava.cats.util.CatsDSLWords.ADDITIONAL_PROPERTIES;
+import static com.endava.cats.util.JsonUtils.NOT_SET;
 
 /**
  * This class is responsible for the HTTP interaction with the target server supplied in the {@code --server} parameter
@@ -84,12 +82,14 @@ import static com.endava.cats.util.CatsDSLWords.ADDITIONAL_PROPERTIES;
 @ApplicationScoped
 @SuppressWarnings("UnstableApiUsage")
 public class ServiceCaller {
+    /**
+     * Marker for fields to be removed before calling the service.
+     */
     public static final String CATS_REMOVE_FIELD = "cats_remove_field";
     private final PrettyLogger logger = PrettyLoggerFactory.getLogger(ServiceCaller.class);
     private static final List<String> AUTH_HEADERS = Arrays.asList("authorization", "jwt", "api-key", "api_key", "apikey",
             "secret", "secret-key", "secret_key", "api-secret", "api_secret", "apisecret", "api-token", "api_token", "apitoken");
     private final FilesArguments filesArguments;
-    private final CatsUtil catsUtil;
     private final TestCaseListener testCaseListener;
     private final AuthArguments authArguments;
     private final ApiArguments apiArguments;
@@ -99,10 +99,19 @@ public class ServiceCaller {
 
     private RateLimiter rateLimiter;
 
+    /**
+     * Constructs a new {@code ServiceCaller} with the specified parameters.
+     *
+     * @param context             The global context for CATS.
+     * @param lr                  The listener for test cases.
+     * @param filesArguments      The arguments related to files.
+     * @param authArguments       The authentication arguments.
+     * @param apiArguments        The API arguments.
+     * @param processingArguments The processing arguments.
+     */
     @Inject
-    public ServiceCaller(CatsGlobalContext context, TestCaseListener lr, CatsUtil cu, FilesArguments filesArguments, AuthArguments authArguments, ApiArguments apiArguments, ProcessingArguments processingArguments) {
+    public ServiceCaller(CatsGlobalContext context, TestCaseListener lr, FilesArguments filesArguments, AuthArguments authArguments, ApiArguments apiArguments, ProcessingArguments processingArguments) {
         this.testCaseListener = lr;
-        this.catsUtil = cu;
         this.filesArguments = filesArguments;
         this.authArguments = authArguments;
         this.apiArguments = apiArguments;
@@ -110,11 +119,17 @@ public class ServiceCaller {
         this.catsGlobalContext = context;
     }
 
+    /**
+     * Inits the rate limiter with the value received in the {@code --maxRequestsPerMinute} argument.
+     */
     @PostConstruct
     public void initRateLimiter() {
         rateLimiter = RateLimiter.create(1.0 * apiArguments.getMaxRequestsPerMinute() / 60);
     }
 
+    /**
+     * Inits the OkHttpClient with the configuration passed through the CLI arguments.
+     */
     @PostConstruct
     public void initHttpClient() {
         try {
@@ -131,7 +146,7 @@ public class ServiceCaller {
                     .retryOnConnectionFailure(true)
                     .hostnameVerifier((hostname, session) -> true).build();
 
-            logger.config("Proxy configuration to be used: {}", authArguments.getProxy());
+            logger.debug("Proxy configuration to be used: {}", authArguments.getProxy());
         } catch (GeneralSecurityException | IOException e) {
             logger.warning("Failed to configure HTTP CLIENT: {}", e.getMessage());
             logger.debug("Stacktrace", e);
@@ -185,6 +200,8 @@ public class ServiceCaller {
      */
     @DryRun
     public CatsResponse call(ServiceData data) {
+        this.recordServiceData(data);
+
         String processedPayload = this.replacePayloadWithRefData(data);
         processedPayload = this.convertPayloadInSpecificContentType(processedPayload, data);
         logger.debug("Payload replaced with ref data: {}", processedPayload);
@@ -197,15 +214,10 @@ public class ServiceCaller {
 
         long startTime = System.currentTimeMillis();
         try {
-            String url = this.getPathWithRefDataReplacedForHttpEntityRequests(data, apiArguments.getServer() + data.getRelativePath());
-
-            if (!HttpMethod.requiresBody(data.getHttpMethod())) {
-                url = this.getPathWithRefDataReplacedForNonHttpEntityRequests(data, apiArguments.getServer() + data.getRelativePath());
-                url = this.addUriParams(processedPayload, data, url);
-            }
-            url = this.addAdditionalQueryParams(url, data.getRelativePath());
+            String url = this.constructUrl(data, processedPayload);
 
             catsRequest.setUrl(url);
+            this.recordRequest(catsRequest);
 
             logger.note("Final list of request headers: {}", headers);
             logger.note("Final payload: {}", processedPayload);
@@ -214,19 +226,62 @@ public class ServiceCaller {
             startTime = System.currentTimeMillis();
             CatsResponse response = this.callService(catsRequest, data.getFuzzedFields());
 
-            this.recordRequestAndResponse(catsRequest, response, data);
+            this.recordResponse(response);
             return response;
-        } catch (IOException e) {
+        } catch (IOException | IllegalStateException e) {
             long duration = System.currentTimeMillis() - startTime;
-            this.recordRequestAndResponse(catsRequest, CatsResponse.builder()
-                    .body("empty response").httpMethod(catsRequest.getHttpMethod())
-                    .responseTimeInMs(duration).responseCode(999)
-                    .jsonBody(new JsonPrimitive("empty response"))
+
+            CatsResponse.ExceptionalResponse exceptionalResponse = CatsResponse.getResponseByException(e);
+
+            CatsResponse catsResponse = CatsResponse.builder()
+                    .body(exceptionalResponse.responseBody()).httpMethod(catsRequest.getHttpMethod())
+                    .responseTimeInMs(duration).responseCode(exceptionalResponse.responseCode())
+                    .jsonBody(JsonUtils.parseAsJsonElement(exceptionalResponse.responseBody()))
                     .fuzzedField(data.getFuzzedFields()
                             .stream().findAny().map(el -> el.substring(el.lastIndexOf("#") + 1)).orElse(null))
-                    .build(), data);
-            throw new CatsException(e);
+                    .build();
+
+            this.recordRequestAndResponse(catsRequest, catsResponse, data);
+
+            logger.debug("Stacktrace from ServiceCaller", e);
+
+
+            return catsResponse;
         }
+    }
+
+    /**
+     * Final url is being constructed by replacing path variables with the supplied urlParams or refData.
+     * It also adds supplied query params if any.
+     *
+     * @param data             the service data context
+     * @param processedPayload current payload
+     * @return an url with path params replaced by urlParams or refData + additional query params
+     */
+    private String constructUrl(ServiceData data, String processedPayload) {
+        if (!data.isReplaceUrlParams()) {
+            String actualUrl = this.replacePathParams(apiArguments.getServer() + data.getRelativePath(), processedPayload, data);
+            return this.replaceRemovedParams(actualUrl);
+        }
+
+        String url = this.getPathWithRefDataReplacedForHttpEntityRequests(data, apiArguments.getServer() + data.getRelativePath());
+
+        if (!HttpMethod.requiresBody(data.getHttpMethod())) {
+            url = this.getPathWithRefDataReplacedForNonHttpEntityRequests(data, apiArguments.getServer() + data.getRelativePath());
+            url = this.addUriParams(processedPayload, data, url);
+        }
+        url = this.addAdditionalQueryParams(url, data.getRelativePath());
+        url = this.addPathParamsIfNotReplaced(url, data.getPathParamsPayload());
+        return url;
+    }
+
+    String addPathParamsIfNotReplaced(String url, String pathParamsPayload) {
+        Set<String> pathVariables = OpenApiUtils.getPathVariables(url);
+        for (String pathVariable : pathVariables) {
+            String pathValue = String.valueOf(JsonUtils.getVariableFromJson(pathParamsPayload, pathVariable));
+            url = url.replace("{" + pathVariable + "}", pathValue);
+        }
+        return url;
     }
 
     String addAdditionalQueryParams(String startingUrl, String currentPath) {
@@ -356,6 +411,14 @@ public class ServiceCaller {
         return path.replaceAll("\\{(.*?)}", "");
     }
 
+    /**
+     * Calls the service with the provided {@code catsRequest} and set of fuzzed fields.
+     *
+     * @param catsRequest  The CATS request to be sent to the service.
+     * @param fuzzedFields The set of fuzzed fields for the request.
+     * @return The CATS response received from the service.
+     * @throws IOException If an I/O error occurs during the service call.
+     */
     public CatsResponse callService(CatsRequest catsRequest, Set<String> fuzzedFields) throws IOException {
         rateLimiter.acquire();
         long startTime = System.currentTimeMillis();
@@ -369,6 +432,7 @@ public class ServiceCaller {
             //for GET and HEAD we remove Content-Type as some servers don't like it
             headers.removeAll("Content-Type");
         }
+
         try (Response response = okHttpClient.newCall(new Request.Builder()
                 .url(catsRequest.getUrl())
                 .headers(headers.build())
@@ -383,8 +447,9 @@ public class ServiceCaller {
                     .fuzzedField(fuzzedFields.stream().findAny().map(el -> el.substring(el.lastIndexOf("#") + 1)).orElse(null))
                     .build();
 
-            logger.complete("Protocol: {}, Method: {}, ResponseCode: {}, ResponseTimeInMs: {}, ResponseLength: {}", response.protocol(),
-                    catsResponse.getHttpMethod(), catsResponse.responseCodeAsString(), endTime - startTime, catsResponse.getContentLengthInBytes());
+            logger.complete("Protocol: {}, Method: {}, ResponseCode: {}, ResponseTimeInMs: {}, ResponseLength: {}, ResponseWords: {}, ResponseLines: {}",
+                    response.protocol(), catsResponse.getHttpMethod(), catsResponse.responseCodeAsString(), endTime - startTime,
+                    catsResponse.getContentLengthInBytes(), catsResponse.getNumberOfWordsInResponse(), catsResponse.getNumberOfLinesInResponse());
 
             return catsResponse;
         }
@@ -394,10 +459,12 @@ public class ServiceCaller {
         List<KeyValuePair<String, String>> responseHeaders = response.headers()
                 .toMultimap()
                 .entrySet().stream()
-                .map(header -> new KeyValuePair<>(header.getKey(), header.getValue().get(0))).toList();
+                .map(header -> new KeyValuePair<>(header.getKey(), header.getValue().getFirst())).toList();
 
         String rawResponse = this.getAsRawString(response);
-        String jsonResponse = this.getAsJsonString(rawResponse);
+        String jsonResponse = JsonUtils.getAsJsonString(rawResponse);
+        String responseContentType = this.getResponseContentType(response);
+
         int numberOfWords = new StringTokenizer(rawResponse).countTokens();
         int numberOfLines = rawResponse.split("[\r|\n]").length;
 
@@ -411,7 +478,16 @@ public class ServiceCaller {
                 .jsonBody(JsonParser.parseString(jsonResponse))
                 .numberOfLinesInResponse(numberOfLines)
                 .contentLengthInBytes(rawResponse.getBytes(StandardCharsets.UTF_8).length)
+                .responseContentType(responseContentType)
                 .numberOfWordsInResponse(numberOfWords);
+    }
+
+    private String getResponseContentType(Response response) {
+        MediaType defaultResponseMediaType = MediaType.parse(CatsResponse.unknownContentType());
+        if (response.body() != null) {
+            return String.valueOf(Optional.ofNullable(response.body().contentType()).orElse(defaultResponseMediaType));
+        }
+        return String.valueOf(defaultResponseMediaType);
     }
 
     private void addBasicAuth(List<KeyValuePair<String, Object>> headers) {
@@ -428,42 +504,41 @@ public class ServiceCaller {
 
 
     private String replacePathParams(String path, String processedPayload, ServiceData data) {
-        JsonElement jsonElement = JsonUtils.parseAsJsonElement(processedPayload);
+        String payloadAsJson = JsonUtils.parseOrConvertToJsonElement(processedPayload).toString();
 
-        String processedPath = path;
-        if (processedPath.contains("{")) {
-            for (Map.Entry<String, JsonElement> child : ((JsonObject) jsonElement).entrySet()) {
-                String toReplaceWith;
-                if (child.getValue().isJsonNull() || child.getValue().isJsonObject()) {
-                    toReplaceWith = "";
-                } else if (child.getValue().isJsonArray()) {
-                    toReplaceWith = URLEncoder.encode(child.getValue().getAsJsonArray().get(0).getAsString(), StandardCharsets.UTF_8);
-                } else {
-                    toReplaceWith = URLEncoder.encode(child.getValue().getAsString(), StandardCharsets.UTF_8);
-                }
-                processedPath = processedPath.replaceAll("\\{" + child.getKey() + "}", toReplaceWith);
-                data.getPathParams().add(child.getKey());
-            }
-        }
-        return processedPath;
+        return Arrays.stream(OpenApiUtils.getPathElements(path))
+                .filter(pathElement -> pathElement.contains("{"))
+                .reduce(path,
+                        (currentPath, pathElement) -> {
+                            String pathElementWithoutBrackets = pathElement.replace("{", "").replace("}", "");
+                            Object pathElementValue = JsonUtils.getVariableFromJson(payloadAsJson, pathElementWithoutBrackets);
+                            data.getPathParams().add(pathElementWithoutBrackets);
+                            return currentPath.replace(pathElement, URLEncoder.encode(String.valueOf(pathElementValue), StandardCharsets.UTF_8));
+                        });
     }
 
     private void addMandatoryHeaders(ServiceData data, List<KeyValuePair<String, Object>> headers) {
         data.getHeaders().forEach(header -> headers.add(new KeyValuePair<>(header.getName(), header.getValue())));
         addIfNotPresent(HttpHeaders.ACCEPT, processingArguments.getDefaultContentType(), data, headers);
-        addIfNotPresent(HttpHeaders.CONTENT_TYPE, data.getContentType(), data, headers);
+        addIfNotPresent(HttpHeaders.CONTENT_TYPE, this.getContentType(data.getHttpMethod(), data.getContentType()), data, headers);
+        addIfNotPresent(HttpHeaders.USER_AGENT, apiArguments.getUserAgent(testCaseListener.getCurrentTestCaseNumber(), testCaseListener.getCurrentFuzzer()), data, headers);
+    }
+
+    private String getContentType(HttpMethod method, String defaultContentType) {
+        return method == HttpMethod.PATCH && processingArguments.isRfc7396() ? ProcessingArguments.JSON_PATCH : defaultContentType;
     }
 
     private void addIfNotPresent(String headerName, String headerValue, ServiceData data, List<KeyValuePair<String, Object>> headers) {
-        boolean notAccept = data.getHeaders().stream().noneMatch(catsHeader -> catsHeader.getName().equalsIgnoreCase(headerName));
-        if (notAccept) {
+        boolean exists = data.getHeaders().stream().noneMatch(catsHeader -> catsHeader.getName().equalsIgnoreCase(headerName));
+        if (exists) {
             headers.add(new KeyValuePair<>(headerName, headerValue));
         }
     }
 
     private List<KeyValuePair<String, String>> buildQueryParameters(String payload, ServiceData data) {
         List<KeyValuePair<String, String>> queryParams = new ArrayList<>();
-        JsonElement jsonElement = JsonUtils.parseAsJsonElement(payload);
+        JsonElement jsonElement = JsonUtils.parseOrConvertToJsonElement(payload);
+
         for (Map.Entry<String, JsonElement> child : ((JsonObject) jsonElement).entrySet()) {
             if (child.getValue().isJsonObject()) {
                 queryParams.addAll(this.buildQueryParameters(child.getValue().toString(), data));
@@ -481,13 +556,14 @@ public class ServiceCaller {
         return queryParams;
     }
 
-    public String getAsJsonString(String rawResponse) {
-        if (JsonUtils.isValidJson(rawResponse)) {
-            return rawResponse;
-        }
-        return "{\"notAJson\": \"" + JSONValue.escape(rawResponse.substring(0, Math.min(500, rawResponse.length()))) + "\"}";
-    }
-
+    /**
+     * Retrieves the raw response body as a string from the provided HTTP response.
+     * If the response body is null, an empty string is returned.
+     *
+     * @param response The HTTP response containing the body to be extracted.
+     * @return The raw response body as a string, or an empty string if the body is null.
+     * @throws IOException If an I/O error occurs while reading the response body.
+     */
     public String getAsRawString(Response response) throws IOException {
         if (response.body() != null) {
             return response.body().string();
@@ -496,18 +572,30 @@ public class ServiceCaller {
         return "";
     }
 
-    private void recordRequestAndResponse(CatsRequest catsRequest, CatsResponse catsResponse, ServiceData serviceData) {
-        testCaseListener.addPath(serviceData.getRelativePath());
+    private void recordServiceData(ServiceData serviceData) {
+        testCaseListener.addPath(serviceData.getContractPath());
         testCaseListener.addContractPath(serviceData.getContractPath());
         testCaseListener.addServer(apiArguments.getServer());
+    }
+
+    private void recordRequest(CatsRequest catsRequest) {
         testCaseListener.addRequest(catsRequest);
-        testCaseListener.addResponse(catsResponse);
         testCaseListener.addFullRequestPath(catsRequest.getUrl());
     }
 
+    private void recordResponse(CatsResponse catsResponse) {
+        testCaseListener.addResponse(catsResponse);
+    }
+
+    private void recordRequestAndResponse(CatsRequest catsRequest, CatsResponse catsResponse, ServiceData serviceData) {
+        this.recordServiceData(serviceData);
+        this.recordRequest(catsRequest);
+        this.recordResponse(catsResponse);
+    }
+
     private void addSuppliedHeaders(ServiceData data, List<KeyValuePair<String, Object>> headers) {
-        Map<String, Object> userSuppliedHeaders = filesArguments.getHeaders(data.getRelativePath());
-        logger.debug("Path {} (including ALL headers) has the following headers: {}", data.getRelativePath(), userSuppliedHeaders);
+        Map<String, Object> userSuppliedHeaders = filesArguments.getHeaders(data.getContractPath());
+        logger.debug("Path {} (including ALL headers) has the following headers: {}", data.getContractPath(), userSuppliedHeaders);
 
         Map<String, String> suppliedHeaders = userSuppliedHeaders.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey,
@@ -536,6 +624,12 @@ public class ServiceCaller {
         return data.getHeaders().stream().anyMatch(catsHeader -> catsHeader.getName().equalsIgnoreCase(suppliedHeader.getKey()));
     }
 
+    /**
+     * Checks if the given header is an authentication header.
+     *
+     * @param header the header name
+     * @return true if the header is an authentication header, false otherwise
+     */
     public boolean isAuthenticationHeader(String header) {
         return AUTH_HEADERS.stream().anyMatch(authHeader -> header.toLowerCase().contains(authHeader));
     }
@@ -576,15 +670,16 @@ public class ServiceCaller {
      * @return the initial payload with reference data replaced and matching POST correlations for DELETE requests
      */
     String replacePayloadWithRefData(ServiceData data) {
-        if (!data.isReplaceRefData()) {
+        if (!data.isReplaceRefData() || "null".equals(data.getPayload())) {
             logger.note("Bypassing reference data replacement for path {}!", data.getRelativePath());
             return data.getPayload();
         } else {
             Map<String, Object> refDataForCurrentPath = filesArguments.getRefData(data.getRelativePath());
             logger.debug("Payload reference data replacement: path {} has the following reference data: {}", data.getRelativePath(), refDataForCurrentPath);
 
-            Map<String, Object> refDataWithoutAdditionalProperties = refDataForCurrentPath.entrySet().stream()
-                    .filter(stringStringEntry -> !stringStringEntry.getKey().equalsIgnoreCase(ADDITIONAL_PROPERTIES))
+            Map<String, Object> refDataWithoutAdditionalProperties = refDataForCurrentPath.entrySet()
+                    .stream()
+                    .filter(stringStringEntry -> !stringStringEntry.getKey().matches(ADDITIONAL_PROPERTIES))
                     .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
             String payload = data.getPayload();
 
@@ -600,17 +695,16 @@ public class ServiceCaller {
                     if (CATS_REMOVE_FIELD.equalsIgnoreCase(String.valueOf(refDataValue))) {
                         payload = JsonUtils.deleteNode(payload, entry.getKey());
                     } else {
-
                         FuzzingStrategy fuzzingStrategy = FuzzingStrategy.replace().withData(refDataValue);
                         boolean mergeFuzzing = data.getFuzzedFields().contains(entry.getKey());
-                        payload = catsUtil.replaceField(payload, entry.getKey(), fuzzingStrategy, mergeFuzzing).json();
+                        payload = FuzzingStrategy.replaceField(payload, entry.getKey(), fuzzingStrategy, mergeFuzzing).json();
                     }
                 } catch (PathNotFoundException e) {
                     logger.debug("Ref data key {} was not found within the payload!", entry.getKey());
                 }
             }
 
-            payload = catsUtil.setAdditionalPropertiesToPayload(refDataForCurrentPath, payload);
+            payload = CatsUtil.setAdditionalPropertiesToPayload(refDataForCurrentPath, payload);
 
             logger.debug("Final payload after reference data replacement: {}", payload);
 

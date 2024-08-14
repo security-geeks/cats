@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
-import java.util.regex.Pattern;
+import java.util.List;
 
 @QuarkusTest
 class StringGeneratorTest {
@@ -24,7 +24,7 @@ class StringGeneratorTest {
     @Test
     void shouldGenerateRandomString() {
         String actual = StringGenerator.generateRandomString();
-        Assertions.assertThat(actual).isEqualTo(StringGenerator.FUZZ);
+        Assertions.assertThat(actual).startsWith(StringGenerator.FUZZ);
     }
 
     @Test
@@ -82,7 +82,7 @@ class StringGeneratorTest {
     void shouldReturnLongLengthWhenMaxLengthIsIntegerMax() {
         Schema<String> schema = new StringSchema();
         schema.setMaxLength(Integer.MAX_VALUE - 2);
-        int maxExpected = Integer.MAX_VALUE - 2;
+        int maxExpected = Integer.MAX_VALUE / 100;
         long actual = StringGenerator.getRightBoundaryLength(schema);
 
         Assertions.assertThat(actual).isEqualTo(maxExpected);
@@ -101,7 +101,7 @@ class StringGeneratorTest {
     void shouldGenerateStringForSpecificRegexes(String regex) {
         String generated = StringGenerator.generate(regex, 2048, 2048);
 
-        Assertions.assertThat(generated).matches(Pattern.compile(regex)).hasSizeBetween(2048, 2048);
+        Assertions.assertThat(generated).matches(regex).hasSizeBetween(2048, 2048);
     }
 
     @ParameterizedTest
@@ -112,10 +112,60 @@ class StringGeneratorTest {
     }
 
     @ParameterizedTest
-    @CsvSource(value = {"^\\+?[1-9]\\d{6,14}$;16", "[A-Z];20", "[A-Z0-9]{13,18};50"}, delimiterString = ";")
+    @CsvSource(value = {"^\\+?[1-9]\\d{6,15}$;16", "[A-Z]+;20", "[A-Z0-9]{13,18};18", "[0-9]+;10", "^(?=[^\\s])(?=.*[^\\s]$)(?=^(?:(?!<|>|%3e|%3c).)*$).*$;2048", "M|F;1"}, delimiterString = ";")
     void shouldGenerateFixedLength(String pattern, int length) {
         String fixedLengthGenerated = StringGenerator.generateExactLength(pattern, length);
 
-        Assertions.assertThat(fixedLengthGenerated).hasSize(length);
+        Assertions.assertThat(fixedLengthGenerated).hasSize(length).matches(pattern);
+    }
+
+    @Test
+    void shouldGenerateWhenNegativeLength() {
+        String generated = StringGenerator.generate("^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$", -1, -1);
+        Assertions.assertThat(generated).hasSize(17).matches("^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$");
+    }
+
+    @Test
+    void shouldGenerateWhenOrEmpty() {
+        String generated = StringGenerator.generate("^$|^(?i)(http:\\/\\/|https:\\/\\/)([a-z0-9./\\-_.~+=:;%&?]+)$", 100, 100);
+        Assertions.assertThat(generated).hasSize(100).matches("^(?i)(http://|https://)([a-z0-9./\\-_.~+=:;%&?]+)");
+    }
+
+    @Test
+    void shouldRemoveCaseInsensitive() {
+        String generated = StringGenerator.cleanPattern("^(?i)(http:\\/\\/|https:\\/\\/)([a-z0-9./\\-_.~+=:;%&?]+)$");
+        Assertions.assertThat(generated).isEqualTo("^(http:\\/\\/|https:\\/\\/)([a-z0-9./\\-_.~+=:;%&?]+)");
+        Assertions.assertThat(StringGenerator.generate(generated, 100, 100)).hasSize(100);
+    }
+
+    @Test
+    void shouldGenerateLeftBoundaryForEnum() {
+        Schema<String> schema = new StringSchema();
+        schema.setEnum(List.of("test", "b", "c"));
+        String generated = StringGenerator.generateLeftBoundString(schema);
+        Assertions.assertThat(generated).hasSize(4);
+    }
+
+    @Test
+    void shouldGenerateEmptyWhenLengthZero() {
+        String generated = StringGenerator.generateExactLength("^[A-Z]{3}$", 0);
+        Assertions.assertThat(generated).isEmpty();
+    }
+
+    @ParameterizedTest
+    @CsvSource(value = {"(^$)|^(((\\+|00)(9[976]\\d|8[987530]\\d|6[987]\\d|5[90]\\d|42\\d|3[875]\\d|2[98654321]\\d|9[8543210]|8[6421]|6[6543210]|5[87654321]|4[987654310]|3[9643210]|2[70]|7|1)([[:space:]]?))?([\\d]{4}\\d{1,9})$);^(((\\+|00)(9[976]\\d|8[987530]\\d|6[987]\\d|5[90]\\d|42\\d|3[875]\\d|2[98654321]\\d|9[8543210]|8[6421]|6[6543210]|5[87654321]|4[987654310]|3[9643210]|2[70]|7|1)([[:space:]]?))?([\\d]{4}\\d{1,9})$)",
+            "/^[^<>]*$/;^[^<>]*", "^[A-Z-a-z0-9]{4}[A-Z-a-z]{2}[A-Z-a-z0-9]{2}([A-Z-a-z0-9]{3})?$;^[A-Z-a-z0-9]{4}[A-Z-a-z]{2}[A-Z-a-z0-9]{2}([A-Z-a-z0-9]{3})?"}, delimiter = ';')
+    void shouldCleanPattern(String pattern, String expected) {
+        String cleaned = StringGenerator.cleanPattern(pattern);
+        Assertions.assertThat(cleaned).isEqualTo(expected);
+    }
+
+    @Test
+    void shouldGenerateMinLengthWhenMaxLengthHigherThanMinLength() {
+        Schema<String> schema = new StringSchema();
+        schema.setMinLength(10);
+        schema.setMaxLength(20);
+        String generated = StringGenerator.generateLeftBoundString(schema);
+        Assertions.assertThat(generated).hasSize(9);
     }
 }

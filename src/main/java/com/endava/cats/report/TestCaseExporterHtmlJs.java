@@ -1,17 +1,34 @@
 package com.endava.cats.report;
 
 import com.endava.cats.args.ReportingArguments;
+import com.endava.cats.context.CatsGlobalContext;
 import com.github.mustachejava.Mustache;
-import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Named;
+import jakarta.inject.Singleton;
 
-@ApplicationScoped
+/**
+ * A concrete implementation of TestCaseExporter for exporting test case results in HTML format with JavaScript.
+ * This class extends the base TestCaseExporter and provides specific functionality for HTML with JavaScript reporting.
+ *
+ * @see TestCaseExporter
+ */
+@Singleton
 @Named("htmlJs")
 public class TestCaseExporterHtmlJs extends TestCaseExporter {
 
+    /**
+     * Constructs a new instance of TestCaseExporterHtmlJs with the specified reporting arguments.
+     *
+     * @param reportingArguments the reporting arguments for configuring the TestCaseExporterHtmlJs
+     * @param catsGlobalContext  the global context for the CATS application
+     */
+    public TestCaseExporterHtmlJs(ReportingArguments reportingArguments, CatsGlobalContext catsGlobalContext) {
+        super(reportingArguments, catsGlobalContext);
+    }
+
     @Override
     public String[] getSpecificHelperFiles() {
-        return new String[]{"styles.css", "script.js"};
+        return new String[]{"styles.css", "script.js", "chart.js"};
     }
 
     @Override

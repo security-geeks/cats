@@ -4,13 +4,12 @@ import com.endava.cats.args.FilesArguments;
 import com.endava.cats.args.MatchArguments;
 import com.endava.cats.fuzzer.executor.FieldsIteratorExecutor;
 import com.endava.cats.http.HttpMethod;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseExporter;
 import com.endava.cats.report.TestCaseListener;
-import com.endava.cats.util.CatsUtil;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import org.assertj.core.api.Assertions;
@@ -27,8 +26,6 @@ class ReplaceObjectsWithArraysFieldsFuzzerTest {
     ServiceCaller serviceCaller;
     @InjectSpy
     TestCaseListener testCaseListener;
-    @InjectSpy
-    CatsUtil catsUtil;
     FieldsIteratorExecutor catsExecutor;
     private ReplaceObjectsWithArraysFieldsFuzzer replaceObjectsWithArraysFieldsFuzzer;
 
@@ -36,7 +33,7 @@ class ReplaceObjectsWithArraysFieldsFuzzerTest {
     void setup() {
         serviceCaller = Mockito.mock(ServiceCaller.class);
         ReflectionTestUtils.setField(testCaseListener, "testCaseExporter", Mockito.mock(TestCaseExporter.class));
-        catsExecutor = new FieldsIteratorExecutor(serviceCaller, testCaseListener, catsUtil, Mockito.mock(MatchArguments.class), Mockito.mock(FilesArguments.class));
+        catsExecutor = new FieldsIteratorExecutor(serviceCaller, testCaseListener, Mockito.mock(MatchArguments.class), Mockito.mock(FilesArguments.class));
         replaceObjectsWithArraysFieldsFuzzer = new ReplaceObjectsWithArraysFieldsFuzzer(catsExecutor);
     }
 
@@ -95,6 +92,6 @@ class ReplaceObjectsWithArraysFieldsFuzzerTest {
                     }
                 """);
         replaceObjectsWithArraysFieldsFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamily.FOURXX));
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX));
     }
 }

@@ -10,18 +10,26 @@ import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.Operation;
 import io.swagger.v3.oas.models.security.SecurityRequirement;
 import io.swagger.v3.oas.models.security.SecurityScheme;
-
 import jakarta.inject.Singleton;
+
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Checks that the OpenAPI Contract has security schemes defined either at global level or path level.
+ */
 @LinterFuzzer
 @Singleton
 public class SecuritySchemesLinterFuzzer extends BaseLinterFuzzer {
     private final PrettyLogger log = PrettyLoggerFactory.getLogger(this.getClass());
 
+    /**
+     * Creates a new SecuritySchemesLinterFuzzer instance.
+     *
+     * @param tcl the test case listener
+     */
     public SecuritySchemesLinterFuzzer(TestCaseListener tcl) {
         super(tcl);
     }
@@ -35,7 +43,7 @@ public class SecuritySchemesLinterFuzzer extends BaseLinterFuzzer {
         List<SecurityRequirement> securityRequirementList = Optional.ofNullable(data.getOpenApi().getSecurity()).orElse(Collections.emptyList());
 
         boolean hasTopLevelSecuritySchemes = !securityRequirementList.isEmpty();
-        boolean areGlobalSecuritySchemesDefined = securityRequirementList.stream().allMatch(securityRequirement -> securitySchemeMap.keySet().containsAll(securityRequirement.keySet()));
+        boolean areGlobalSecuritySchemesDefined = securityRequirementList.stream().allMatch(securityRequirement -> Optional.ofNullable(securitySchemeMap).orElse(Collections.emptyMap()).keySet().containsAll(securityRequirement.keySet()));
 
         Operation operation = HttpMethod.getOperation(data.getMethod(), data.getPathItem());
 

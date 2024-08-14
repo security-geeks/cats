@@ -1,6 +1,5 @@
 package com.endava.cats.util;
 
-import com.endava.cats.json.JsonUtils;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
 import jakarta.inject.Singleton;
@@ -26,6 +25,12 @@ public class VersionChecker {
             .readTimeout(2, TimeUnit.SECONDS)
             .build();
 
+    /**
+     * Checks if a new version is available compared to the current version.
+     *
+     * @param currentVersion the current semantic version
+     * @return a CheckResult with information about the new version, if present
+     */
     public CheckResult checkForNewVersion(String currentVersion) {
         boolean updateAvailable = false;
         String downloadLink = null;
@@ -53,9 +58,9 @@ public class VersionChecker {
                 .build();
     }
 
-    public static int compare(String version1, String version2) {
-        String[] parts1 = version1.replace("-SNAPSHOT", "").split("\\.");
-        String[] parts2 = version2.replace("-SNAPSHOT", "").split("\\.");
+    static int compare(String version1, String version2) {
+        String[] parts1 = version1.replace("-SNAPSHOT", "").split("\\.", -1);
+        String[] parts2 = version2.replace("-SNAPSHOT", "").split("\\.", -1);
 
         int length = Math.max(parts1.length, parts2.length);
 
@@ -73,14 +78,31 @@ public class VersionChecker {
         return 0;
     }
 
+    /**
+     * Represents the result of a version check operation.
+     */
     @Builder
     @Getter
     @ToString
     public static class CheckResult {
+        /**
+         * Indicates whether a new version is available.
+         */
         private boolean newVersion;
+
+        /**
+         * The version information.
+         */
         private String version;
+
+        /**
+         * The download URL for the new version.
+         */
         private String downloadUrl;
 
+        /**
+         * The release notes for the new version.
+         */
         private String releaseNotes;
     }
 }

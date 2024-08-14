@@ -1,9 +1,12 @@
 package com.endava.cats.strategy;
 
+/**
+ * Fuzzing strategy that prefixes valid data with fuzzed values.
+ */
 public final class PrefixFuzzingStrategy extends FuzzingStrategy {
     @Override
     public Object process(Object value) {
-        return String.valueOf(data) + String.valueOf(value);
+        return data + String.valueOf(value);
     }
 
     @Override

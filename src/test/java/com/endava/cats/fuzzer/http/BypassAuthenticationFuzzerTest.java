@@ -2,14 +2,13 @@ package com.endava.cats.fuzzer.http;
 
 import com.endava.cats.args.FilesArguments;
 import com.endava.cats.fuzzer.executor.SimpleExecutor;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.CatsHeader;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseExporter;
 import com.endava.cats.report.TestCaseListener;
-import com.endava.cats.util.CatsUtil;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import io.swagger.v3.oas.models.media.StringSchema;
@@ -30,7 +29,6 @@ import java.util.Set;
 @QuarkusTest
 class BypassAuthenticationFuzzerTest {
     private ServiceCaller serviceCaller;
-    private CatsUtil catsUtil;
     @InjectSpy
     private TestCaseListener testCaseListener;
     private FilesArguments filesArguments;
@@ -56,19 +54,19 @@ class BypassAuthenticationFuzzerTest {
 
 
     @Test
-    void givenAPayloadWithAuthenticationHeadersAndCustomHeaders_whenApplyingTheBypassAuthenticationFuzzer_thenTheFuzzerRuns() throws Exception {
+    void givenAPayloadWithAuthenticationHeadersAndCustomHeaders_whenApplyingTheBypassAuthenticationFuzzer_thenTheFuzzerRuns() {
         Mockito.when(filesArguments.getHeaders(Mockito.anyString())).thenReturn(createCustomFuzzerFile());
 
         Map<String, List<String>> responses = new HashMap<>();
         responses.put("200", Collections.singletonList("response"));
         FuzzingData data = FuzzingData.builder().headers(Collections.singleton(CatsHeader.builder().name("authorization").value("auth").build())).
-                responses(responses).path("test1").reqSchema(new StringSchema()).requestContentTypes(List.of("application/json")).build();
+                responses(responses).path("test1").reqSchema(new StringSchema()).requestContentTypes(List.of("application/json")).responseCodes(Set.of("400")).build();
         CatsResponse catsResponse = CatsResponse.builder().body("{}").responseCode(200).build();
         Mockito.when(serviceCaller.call(Mockito.any())).thenReturn(catsResponse);
-        Mockito.doNothing().when(testCaseListener).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.any());
+        Mockito.doNothing().when(testCaseListener).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.any(), Mockito.anyBoolean());
 
         bypassAuthenticationFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamily.FOURXX_AA));
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX_AA), Mockito.anyBoolean(), Mockito.eq(true));
     }
 
     @Test
@@ -76,13 +74,13 @@ class BypassAuthenticationFuzzerTest {
         Map<String, List<String>> responses = new HashMap<>();
         responses.put("200", Collections.singletonList("response"));
         FuzzingData data = FuzzingData.builder().headers(Collections.singleton(CatsHeader.builder().name("authorization").value("auth").build())).
-                responses(responses).reqSchema(new StringSchema()).requestContentTypes(List.of("application/json")).build();
+                responses(responses).reqSchema(new StringSchema()).requestContentTypes(List.of("application/json")).responseCodes(Set.of("400")).build();
         CatsResponse catsResponse = CatsResponse.builder().body("{}").responseCode(200).build();
         Mockito.when(serviceCaller.call(Mockito.any())).thenReturn(catsResponse);
-        Mockito.doNothing().when(testCaseListener).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.any());
+        Mockito.doNothing().when(testCaseListener).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.any(), Mockito.anyBoolean());
 
         bypassAuthenticationFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamily.FOURXX_AA));
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.eq(catsResponse), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX_AA), Mockito.anyBoolean(), Mockito.eq(true));
     }
 
     @Test
@@ -111,7 +109,7 @@ class BypassAuthenticationFuzzerTest {
     }
 
     @Test
-    void shouldProperlyIdentifyAuthHeadersFromHeadersFile() throws Exception {
+    void shouldProperlyIdentifyAuthHeadersFromHeadersFile() {
         Mockito.when(filesArguments.getHeaders(Mockito.any())).thenReturn(createCustomFuzzerFile());
         FuzzingData data = FuzzingData.builder().headers(new HashSet<>()).path("path1").reqSchema(new StringSchema()).build();
         Set<String> authHeaders = bypassAuthenticationFuzzer.getAuthenticationHeaderProvided(data);

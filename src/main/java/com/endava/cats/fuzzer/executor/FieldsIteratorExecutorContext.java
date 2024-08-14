@@ -13,6 +13,9 @@ import java.util.List;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 
+/**
+ * Context used by the FieldsIteratorExecutor.
+ */
 @Builder
 @Value
 public class FieldsIteratorExecutorContext {
@@ -44,7 +47,7 @@ public class FieldsIteratorExecutorContext {
 
     String skipMessage;
 
-    BiFunction<Schema<?>, String, List<String>> fuzzValueProducer;
+    BiFunction<Schema<?>, String, List<Object>> fuzzValueProducer;
 
     @Builder.Default
     boolean replaceRefData = true;

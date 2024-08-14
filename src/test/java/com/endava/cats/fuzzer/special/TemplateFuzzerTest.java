@@ -32,7 +32,6 @@ class TemplateFuzzerTest {
     private ServiceCaller serviceCaller;
     @InjectSpy
     private TestCaseListener testCaseListener;
-    private CatsUtil catsUtil;
 
     private TemplateFuzzer templateFuzzer;
 
@@ -41,19 +40,18 @@ class TemplateFuzzerTest {
         matchArguments = Mockito.mock(MatchArguments.class);
         userArguments = Mockito.mock(UserArguments.class);
         serviceCaller = Mockito.mock(ServiceCaller.class);
-        catsUtil = new CatsUtil();
         serviceCaller = Mockito.mock(ServiceCaller.class);
-        templateFuzzer = new TemplateFuzzer(serviceCaller, testCaseListener, catsUtil, userArguments, matchArguments);
+        templateFuzzer = new TemplateFuzzer(serviceCaller, testCaseListener, userArguments, matchArguments);
         ReflectionTestUtils.setField(testCaseListener, "testCaseExporter", Mockito.mock(TestCaseExporter.class));
         CatsUtil.setCatsLogLevel("SEVERE");//we do this in order to avoid surefire breaking due to \uFFFe
     }
 
     @Test
     void shouldNotRunWhenNoTargetFields() {
-        FuzzingData data = FuzzingData.builder().targetFields(Collections.emptySet()).build();
+        FuzzingData data = FuzzingData.builder().contractPath("/path").method(HttpMethod.POST).targetFields(Collections.emptySet()).build();
 
         templateFuzzer.fuzz(data);
-        Mockito.verifyNoInteractions(testCaseListener);
+        Mockito.verify(testCaseListener, Mockito.times(0)).createAndExecuteTest(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
     }
 
     @Test
@@ -62,10 +60,12 @@ class TemplateFuzzerTest {
                 .targetFields(Set.of("test"))
                 .processedPayload("{\"field\":\"value\"}")
                 .headers(Collections.emptySet())
+                .method(HttpMethod.POST)
+                .contractPath("/path")
                 .path("http://url")
                 .build();
         templateFuzzer.fuzz(data);
-        Mockito.verifyNoInteractions(testCaseListener);
+        Mockito.verify(testCaseListener, Mockito.times(0)).createAndExecuteTest(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
     }
 
     @Test
@@ -84,10 +84,20 @@ class TemplateFuzzerTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"true,true", "false,false", "false,true"})
-    void shouldRunWhenMatchArgumentsAndResponseMatched(boolean isAnyMatch, boolean isResponseMatch) throws Exception {
+    @CsvSource({
+            "true,true,true",
+            "true,true,false",
+            "true,false,true",
+            "false,true,true",
+            "false,true,false",
+            "false,false,true",
+            "false,false,false"
+    })
+    void shouldRunWhenMatchArgumentsAndResponseMatched(boolean isAnyMatch, boolean isResponseMatch, boolean isInputMatch) throws Exception {
         Mockito.when(matchArguments.isAnyMatchArgumentSupplied()).thenReturn(isAnyMatch);
         Mockito.when(matchArguments.isMatchResponse(Mockito.any())).thenReturn(isResponseMatch);
+        Mockito.when(matchArguments.isInputReflected(Mockito.any(), Mockito.any())).thenReturn(isInputMatch);
+        Mockito.when(matchArguments.getMatchString()).thenReturn(" arguments");
         Mockito.when(serviceCaller.callService(Mockito.any(), Mockito.any())).thenReturn(CatsResponse.empty());
         FuzzingData data = FuzzingData.builder()
                 .targetFields(Set.of("field"))
@@ -97,7 +107,7 @@ class TemplateFuzzerTest {
                 .method(HttpMethod.POST)
                 .build();
         templateFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(45)).reportResultError(Mockito.any(), Mockito.any(), Mockito.anyString(), Mockito.eq("Service call completed. Please check response details."), Mockito.any());
+        Mockito.verify(testCaseListener, Mockito.times(45)).reportResultError(Mockito.any(), Mockito.any(), Mockito.eq("Response matches arguments"), Mockito.anyString(), Mockito.any());
     }
 
     @ParameterizedTest
@@ -113,7 +123,7 @@ class TemplateFuzzerTest {
                 .method(HttpMethod.POST)
                 .build();
         templateFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(38)).reportResultError(Mockito.any(), Mockito.any(), Mockito.anyString(), Mockito.eq("Service call completed. Please check response details."), Mockito.any());
+        Mockito.verify(testCaseListener, Mockito.times(38)).reportResultError(Mockito.any(), Mockito.any(), Mockito.eq("Response matches arguments"), Mockito.anyString(), Mockito.any());
     }
 
 
@@ -129,7 +139,7 @@ class TemplateFuzzerTest {
                 .path("http://url")
                 .build();
         templateFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(45)).reportResultError(Mockito.any(), Mockito.any(), Mockito.anyString(), Mockito.eq("Service call completed. Please check response details."), Mockito.any());
+        Mockito.verify(testCaseListener, Mockito.times(45)).reportResultError(Mockito.any(), Mockito.any(), Mockito.eq("Response matches arguments"), Mockito.anyString(), Mockito.any());
 
     }
 
@@ -144,7 +154,7 @@ class TemplateFuzzerTest {
                 .build();
         Mockito.when(userArguments.getWords()).thenReturn(new File("non_real"));
         templateFuzzer.fuzz(data);
-        Mockito.verifyNoInteractions(testCaseListener);
+        Mockito.verify(testCaseListener, Mockito.times(0)).createAndExecuteTest(Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any());
     }
 
     @Test
@@ -159,7 +169,23 @@ class TemplateFuzzerTest {
                 .build();
         Mockito.when(userArguments.getWords()).thenReturn(new File("src/test/resources/dict.txt"));
         templateFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(2)).reportResultError(Mockito.any(), Mockito.any(), Mockito.anyString(), Mockito.eq("Service call completed. Please check response details."), Mockito.any());
+        Mockito.verify(testCaseListener, Mockito.times(2)).reportResultError(Mockito.any(), Mockito.any(), Mockito.eq("Response matches arguments"), Mockito.anyString(), Mockito.any());
+    }
+
+    @ParameterizedTest
+    @CsvSource({"{\"field\":\"value\"},http://url/FUZZ,2", "{\"field\":\"FUZZ\"},http://url/,2", "{\"field\":\"value\"},http://url/,0"})
+    void shouldRunWithFuzzKeyword(String payload, String path, int times) throws Exception {
+        Mockito.when(serviceCaller.callService(Mockito.any(), Mockito.any())).thenReturn(CatsResponse.empty());
+        FuzzingData data = FuzzingData.builder()
+                .targetFields(Set.of("FUZZ"))
+                .headers(Set.of())
+                .processedPayload(payload)
+                .method(HttpMethod.POST)
+                .path(path)
+                .build();
+        Mockito.when(userArguments.getWords()).thenReturn(new File("src/test/resources/dict.txt"));
+        templateFuzzer.fuzz(data);
+        Mockito.verify(testCaseListener, Mockito.times(times)).reportResultError(Mockito.any(), Mockito.any(), Mockito.eq("Response matches arguments"), Mockito.anyString(), Mockito.any());
     }
 
     @Test
@@ -176,7 +202,7 @@ class TemplateFuzzerTest {
 
         templateFuzzer.fuzz(data);
 
-        Mockito.verify(testCaseListener, Mockito.times(2)).reportResultError(Mockito.any(), Mockito.any(), Mockito.anyString(), Mockito.eq("Something went wrong {}"), Mockito.any());
+        Mockito.verify(testCaseListener, Mockito.times(2)).reportResultError(Mockito.any(), Mockito.any(), Mockito.eq("Response matches arguments"), Mockito.any(), Mockito.any());
     }
 
     @Test
@@ -222,5 +248,16 @@ class TemplateFuzzerTest {
     @Test
     void shouldHaveDescription() {
         Assertions.assertThat(templateFuzzer.description()).isNotBlank();
+    }
+
+    @Test
+    void shouldReplaceComplexPaths() {
+        FuzzingData data = FuzzingData.builder()
+                .path("http://localhost:8000/lookup?url=http%3A%2F%2Flocalhost%3A6001/users/ID")
+                .build();
+        Mockito.when(userArguments.isSimpleReplace()).thenReturn(true);
+        String replaced = templateFuzzer.replacePath(data, "valueReplaced", "ID");
+
+        Assertions.assertThat(replaced).isEqualTo("http://localhost:8000/lookup?url=http%3A%2F%2Flocalhost%3A6001/users/valueReplaced");
     }
 }

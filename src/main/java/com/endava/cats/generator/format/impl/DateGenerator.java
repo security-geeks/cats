@@ -2,15 +2,20 @@ package com.endava.cats.generator.format.impl;
 
 import com.endava.cats.generator.format.api.InvalidDataFormatGenerator;
 import com.endava.cats.generator.format.api.OpenAPIFormat;
+import com.endava.cats.generator.format.api.PropertySanitizer;
 import com.endava.cats.generator.format.api.ValidDataFormatGenerator;
 import io.swagger.v3.oas.models.media.Schema;
-
 import jakarta.inject.Singleton;
+
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+/**
+ * A generator class implementing various interfaces for generating valid and invalid date data formats.
+ * It also implements the OpenAPIFormat interface.
+ */
 @Singleton
 public class DateGenerator implements ValidDataFormatGenerator, InvalidDataFormatGenerator, OpenAPIFormat {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -22,7 +27,10 @@ public class DateGenerator implements ValidDataFormatGenerator, InvalidDataForma
 
     @Override
     public boolean appliesTo(String format, String propertyName) {
-        return "date".equalsIgnoreCase(format);
+        return "date".equalsIgnoreCase(format) &&
+                !PropertySanitizer.sanitize(propertyName).endsWith("birthdate") &&
+                !PropertySanitizer.sanitize(propertyName).endsWith("dob") &&
+                !PropertySanitizer.sanitize(propertyName).endsWith("dateofbirth");
     }
 
     @Override
@@ -36,7 +44,7 @@ public class DateGenerator implements ValidDataFormatGenerator, InvalidDataForma
     }
 
     @Override
-    public List<String> marchingFormats() {
+    public List<String> matchingFormats() {
         return List.of("date");
     }
 }

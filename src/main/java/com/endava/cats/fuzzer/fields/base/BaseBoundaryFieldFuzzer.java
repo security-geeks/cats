@@ -3,10 +3,10 @@ package com.endava.cats.fuzzer.fields.base;
 import com.endava.cats.args.FilesArguments;
 import com.endava.cats.generator.format.api.InvalidDataFormat;
 import com.endava.cats.io.ServiceCaller;
+import com.endava.cats.util.JsonUtils;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.strategy.FuzzingStrategy;
-import com.endava.cats.util.CatsUtil;
 import io.swagger.v3.oas.models.media.Schema;
 
 import java.util.Collections;
@@ -17,8 +17,16 @@ import java.util.List;
  * The assumption is that expected response is a 4XX code when sending out of boundary values for the fuzzed fields.
  */
 public abstract class BaseBoundaryFieldFuzzer extends ExpectOnly4XXBaseFieldsFuzzer {
-    protected BaseBoundaryFieldFuzzer(ServiceCaller sc, TestCaseListener lr, CatsUtil cu, FilesArguments cp) {
-        super(sc, lr, cu, cp);
+
+    /**
+     * Constructor for initializing common dependencies for fuzzing boundary fields.
+     *
+     * @param sc The {@link ServiceCaller} used to make service calls
+     * @param lr The {@link TestCaseListener} for reporting test case events
+     * @param cp The {@link FilesArguments} for file-related arguments
+     */
+    protected BaseBoundaryFieldFuzzer(ServiceCaller sc, TestCaseListener lr, FilesArguments cp) {
+        super(sc, lr, cp);
     }
 
     @Override
@@ -30,13 +38,14 @@ public abstract class BaseBoundaryFieldFuzzer extends ExpectOnly4XXBaseFieldsFuz
     public List<FuzzingStrategy> getFieldFuzzingStrategy(FuzzingData data, String fuzzedField) {
         Schema<?> schema = data.getRequestPropertyTypes().get(fuzzedField);
 
-        if (this.fuzzedFieldHasAnAssociatedSchema(schema)) {
+        if (this.fuzzedFieldHasAnAssociatedSchema(schema) && this.isFieldPartOfPayload(fuzzedField, data.getPayload())) {
             logger.debug("Field {} has an associated schema", fuzzedField);
             logger.note("Field [{}] schema is [{}] and type [{}]", fuzzedField, schema.getClass().getSimpleName(), schema.getType());
-            if (this.isFieldFuzzable(fuzzedField, data) && this.fuzzerGeneratedBoundaryValue(schema)) {
+            Object generatedBoundaryValue = this.getBoundaryValue(schema);
+            if (this.isFieldFuzzable(fuzzedField, data) && generatedBoundaryValue != null) {
                 logger.debug("Field {} is fuzzable and has boundary value", fuzzedField);
                 logger.debug("{} type matching. Start fuzzing...", getSchemaTypesTheFuzzerWillApplyTo());
-                return Collections.singletonList(FuzzingStrategy.replace().withData(this.getBoundaryValue(schema)));
+                return Collections.singletonList(FuzzingStrategy.replace().withData(generatedBoundaryValue));
             } else if (!this.hasBoundaryDefined(fuzzedField, data)) {
                 logger.debug("Field {} does not have a boundary defined", fuzzedField);
                 logger.skip("Boundaries not defined. Will skip fuzzing...");
@@ -49,8 +58,15 @@ public abstract class BaseBoundaryFieldFuzzer extends ExpectOnly4XXBaseFieldsFuz
         return Collections.singletonList(FuzzingStrategy.skip().withData("Data type not matching " + getSchemaTypesTheFuzzerWillApplyTo()));
     }
 
-    private boolean fuzzerGeneratedBoundaryValue(Schema<?> schema) {
-        return this.getBoundaryValue(schema) != null;
+    /**
+     * There are cases when field is part of a different oneOf, anyOf element.
+     *
+     * @param field   the field being fuzzed
+     * @param payload the payload
+     * @return true if field is part of the payload, false otherwise
+     */
+    private boolean isFieldPartOfPayload(String field, String payload) {
+        return JsonUtils.isFieldInJson(payload, field);
     }
 
     /**

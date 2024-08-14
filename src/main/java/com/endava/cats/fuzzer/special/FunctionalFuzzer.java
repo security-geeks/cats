@@ -5,13 +5,12 @@ import com.endava.cats.args.FilesArguments;
 import com.endava.cats.fuzzer.fields.base.CustomFuzzerBase;
 import com.endava.cats.model.CustomFuzzerExecution;
 import com.endava.cats.model.FuzzingData;
+import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.util.CatsDSLWords;
-import com.endava.cats.util.CatsUtil;
 import com.endava.cats.util.ConsoleUtils;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
 import jakarta.inject.Singleton;
-import org.slf4j.MDC;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -24,6 +23,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Executes functional tests written in Cats DSL.
+ */
 @Singleton
 @SpecialFuzzer
 public class FunctionalFuzzer implements CustomFuzzerBase {
@@ -31,12 +33,20 @@ public class FunctionalFuzzer implements CustomFuzzerBase {
     private final FilesArguments filesArguments;
     private final CustomFuzzerUtil customFuzzerUtil;
     private final List<CustomFuzzerExecution> executions = new ArrayList<>();
+    private final TestCaseListener testCaseListener;
 
-    public FunctionalFuzzer(FilesArguments cp, CustomFuzzerUtil cfu) {
+    /**
+     * Constructs a new FunctionalFuzzer instance.
+     *
+     * @param cp               The FilesArguments object containing the files to be fuzzed.
+     * @param cfu              The CustomFuzzerUtil object used to perform custom fuzzing operations.
+     * @param testCaseListener The TestCaseListener object used to report test case results and progress.
+     */
+    public FunctionalFuzzer(FilesArguments cp, CustomFuzzerUtil cfu, TestCaseListener testCaseListener) {
         this.filesArguments = cp;
         this.customFuzzerUtil = cfu;
+        this.testCaseListener = testCaseListener;
     }
-
 
     @Override
     public void fuzz(FuzzingData data) {
@@ -45,15 +55,15 @@ public class FunctionalFuzzer implements CustomFuzzerBase {
         }
     }
 
-    protected void processCustomFuzzerFile(FuzzingData data) {
-        Map<String, Object> currentPathValues = filesArguments.getCustomFuzzerDetails().get(data.getPath());
+    void processCustomFuzzerFile(FuzzingData data) {
+        Map<String, Object> currentPathValues = filesArguments.getCustomFuzzerDetails().get(data.getContractPath());
         if (currentPathValues != null) {
             currentPathValues.entrySet().stream()
                     .filter(stringObjectEntry -> customFuzzerUtil.isMatchingHttpMethod(stringObjectEntry.getValue(), data.getMethod()))
                     .forEach(entry -> executions.add(CustomFuzzerExecution.builder()
                             .fuzzingData(data).testId(entry.getKey()).testEntry(entry.getValue()).build()));
         } else {
-            logger.skip("Skipping path [{}] for method [{}] as it was not configured in customFuzzerFile", data.getPath(), data.getMethod());
+            logger.skip("Skipping path [{}] for method [{}] as it was not configured in customFuzzerFile", data.getContractPath(), data.getMethod());
         }
     }
 
@@ -65,20 +75,26 @@ public class FunctionalFuzzer implements CustomFuzzerBase {
      */
     public void executeCustomFuzzerTests() {
         logger.debug("Executing {} functional tests.", executions.size());
-        MDC.put("fuzzer", "FF");
-        MDC.put("fuzzerKey", "FunctionalFuzzer");
-
         Collections.sort(executions);
 
         for (Map.Entry<String, Map<String, Object>> entry : filesArguments.getCustomFuzzerDetails().entrySet()) {
-            executions.stream().filter(customFuzzerExecution -> customFuzzerExecution.getFuzzingData().getPath().equalsIgnoreCase(entry.getKey()))
-                    .forEach(customFuzzerExecution -> customFuzzerUtil.executeTestCases(customFuzzerExecution.getFuzzingData(), customFuzzerExecution.getTestId(),
-                            customFuzzerExecution.getTestEntry(), this));
+            executions.stream().filter(customFuzzerExecution -> customFuzzerExecution.getFuzzingData().getContractPath().equalsIgnoreCase(entry.getKey()))
+                    .forEach(customFuzzerExecution -> {
+                        testCaseListener.beforeFuzz(this.getClass(), customFuzzerExecution.getFuzzingData().getContractPath(), customFuzzerExecution.getFuzzingData().getMethod().name());
+                        customFuzzerUtil.executeTestCases(customFuzzerExecution.getFuzzingData(), customFuzzerExecution.getTestId(),
+                                customFuzzerExecution.getTestEntry(), this);
+                        testCaseListener.afterFuzz(customFuzzerExecution.getFuzzingData().getContractPath());
+                    });
         }
-        MDC.put("fuzzer", CatsUtil.FUZZER_KEY_DEFAULT);
-        MDC.put("fuzzerKey", CatsUtil.FUZZER_KEY_DEFAULT);
     }
 
+    /**
+     * Replaces variables in the reference data file (refData.yml) with output variables generated
+     * by the FunctionalFuzzer. If no reference data file exists, or if `filesArguments.isCreateRefData()`
+     * is `true`, a new reference data file will be created.
+     *
+     * @throws IOException if an I/O error occurs
+     */
     public void replaceRefData() throws IOException {
         if (filesArguments.getRefDataFile() != null) {
             logger.debug("Replacing variables in refData file with output variables from FunctionalFuzzer!");
@@ -113,8 +129,7 @@ public class FunctionalFuzzer implements CustomFuzzerBase {
     }
 
     @Override
-    public List<String> reservedWords() {
-        return Arrays.asList(CatsDSLWords.EXPECTED_RESPONSE_CODE, CatsDSLWords.DESCRIPTION, CatsDSLWords.OUTPUT, CatsDSLWords.VERIFY, CatsDSLWords.MAP_VALUES,
-                CatsDSLWords.ONE_OF_SELECTION, CatsDSLWords.ADDITIONAL_PROPERTIES, CatsDSLWords.ELEMENT, CatsDSLWords.HTTP_METHOD);
+    public List<String> requiredKeywords() {
+        return Arrays.asList(CatsDSLWords.EXPECTED_RESPONSE_CODE, CatsDSLWords.HTTP_METHOD, CatsDSLWords.DESCRIPTION);
     }
 }

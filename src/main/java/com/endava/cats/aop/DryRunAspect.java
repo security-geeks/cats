@@ -5,16 +5,15 @@ import com.endava.cats.args.FilterArguments;
 import com.endava.cats.args.ReportingArguments;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
-import com.endava.cats.json.JsonUtils;
 import com.endava.cats.util.CatsUtil;
+import com.endava.cats.util.JsonUtils;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
-import org.apache.commons.lang3.StringUtils;
-
 import jakarta.inject.Inject;
 import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
+
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -41,8 +40,15 @@ public class DryRunAspect {
 
     private int counter;
 
+    /**
+     * Intercepts the startSession from the TestCaseListener.
+     *
+     * @param context invocation context
+     * @return result of the real method
+     * @throws Exception if something goes wrong
+     */
     public Object startSession(InvocationContext context) throws Exception {
-        if (reportingArguments.isJson()) {
+        if (reportingArguments.isJsonOutput()) {
             CatsUtil.setCatsLogLevel("OFF");
         }
         Object result = context.proceed();
@@ -50,69 +56,91 @@ public class DryRunAspect {
         return result;
     }
 
+    /**
+     * Doesn't do anything.
+     *
+     * @return empty CatsResponse
+     */
     public Object dontInvokeService() {
         return CatsResponse.empty();
     }
 
+    /**
+     * Prevents test files from being written.
+     *
+     * @return null
+     */
     public Object dontWriteTestCase() {
         return null;
     }
 
+    /**
+     * Logic to be executed instead of TestCaseListener.endSession()
+     *
+     * @return nothing
+     */
     public Object endSession() {
-        if (reportingArguments.isJson()) {
+        if (reportingArguments.isJsonOutput()) {
             List<DryRunEntry> pathTests = paths.entrySet().stream()
-                    .map(entry -> DryRunEntry.builder().path(entry.getKey().substring(0, entry.getKey().lastIndexOf("_")))
-                            .httpMethod(entry.getKey().substring(entry.getKey().lastIndexOf("_") + 1))
-                            .tests(String.valueOf(entry.getValue())).build())
+                    .map(entry -> {
+                        int splitIndex = entry.getKey().lastIndexOf("_");
+                        String path = entry.getKey().substring(0, splitIndex);
+                        String httpMethod = entry.getKey().substring(splitIndex + 1);
+
+                        return new DryRunEntry(path, httpMethod, String.valueOf(entry.getValue()));
+                    })
                     .toList();
             logger.noFormat(JsonUtils.GSON.toJson(pathTests));
         } else {
             logger.noFormat("\n");
             CatsUtil.setCatsLogLevel("INFO");
-            logger.info("Number of tests that will be run with this configuration: {}", paths.values().stream().reduce(0, Integer::sum));
-            paths.forEach((s, integer) -> logger.star(ansi().fgBrightYellow().bold().a(" -> path {}: {} tests").toString(), s, integer));
+            logger.noFormat("Number of tests that will be run with this configuration: {}", paths.values().stream().reduce(0, Integer::sum));
+            paths.forEach((s, integer) -> logger.noFormat(ansi().fgBrightYellow().bold().a(" -> path {}: {} tests").toString(), s, integer));
         }
         return null;
     }
 
+    /**
+     * Logic to be executed instead of TestCaseListener.reportXXX methods.
+     *
+     * @param context invocation context
+     * @return nothing
+     */
     public Object report(InvocationContext context) {
         Object data = context.getParameters()[1];
 
         if (data instanceof FuzzingData fuzzingData) {
-            if (counter % 10000 == 0 && !reportingArguments.isJson()) {
-                logger.noFormat(StringUtils.repeat("..", 1 + (counter / 10000)));
-            }
             paths.merge(fuzzingData.getPath() + "_" + fuzzingData.getMethod(), 1, Integer::sum);
         }
         counter++;
         return null;
     }
 
+    /**
+     * Intercepts all calls annotated with DryRun
+     *
+     * @param context invocation context
+     * @return mostly nothing
+     * @throws Exception in case something happens
+     */
     @AroundInvoke
     public Object intercept(InvocationContext context) throws Exception {
-        if (filterArguments.isDryRun()) {
-            if (context.getMethod().getName().startsWith("report")) {
-                return report(context);
-            }
-            if (context.getMethod().getName().startsWith("endSession")) {
-                return endSession();
-            }
-            if (context.getMethod().getName().startsWith("startSession")) {
-                return startSession(context);
-            }
-            if (context.getMethod().getName().startsWith("call")) {
-                return dontInvokeService();
-            }
-            if (context.getMethod().getName().startsWith("getErrors")) {
-                return 0;
-            }
-            if (context.getMethod().getName().startsWith("writeTestCase")) {
-                return dontWriteTestCase();
-            }
-            if (context.getMethod().getName().startsWith("initReportingPath")) {
-                return 0;
-            }
+        if (!filterArguments.isDryRun()) {
+            return context.proceed();
         }
-        return context.proceed();
+
+        String methodName = context.getMethod().getName();
+        return switch (methodName) {
+            case String s when s.startsWith("report") -> report(context);
+            case String s when s.startsWith("endSession") -> endSession();
+            case String s when s.startsWith("startSession") -> startSession(context);
+            case String s when s.startsWith("call") -> dontInvokeService();
+            case String s when s.startsWith("writeTestCase") -> dontWriteTestCase();
+            case String s when s.startsWith("getErrors") ||
+                    s.startsWith("initReportingPath") ||
+                    s.startsWith("renderFuzzingHeader") ||
+                    s.startsWith("notifySummaryObservers") -> 0;
+            default -> context.proceed();
+        };
     }
 }

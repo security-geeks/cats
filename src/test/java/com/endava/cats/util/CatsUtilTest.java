@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -36,9 +37,8 @@ class CatsUtilTest {
             "{\"field\": {\"subField\":\"value\"}, \"anotherField\":\"otherValue\"}|field#subField",
             "{\"field\": [{\"subField\":\"value\"},{\"subField\":\"value\"}], \"anotherField\":\"otherValue\"}|field[*]#subField"}, delimiter = '|')
     void givenAPayloadAndAFuzzingStrategy_whenReplacingTheFuzzedValue_thenThePayloadIsProperlyFuzzed(String json, String path) {
-        CatsUtil catsUtil = new CatsUtil();
         FuzzingStrategy strategy = FuzzingStrategy.replace().withData("fuzzed");
-        FuzzingResult result = catsUtil.replaceField(json, path, strategy);
+        FuzzingResult result = FuzzingStrategy.replaceField(json, path, strategy);
 
         Assertions.assertThat(result.fuzzedValue()).isEqualTo("fuzzed");
         Assertions.assertThat(result.json()).contains("fuzzed");
@@ -46,48 +46,56 @@ class CatsUtilTest {
 
     @Test
     void shouldAddTopElement() {
-        CatsUtil catsUtil = new CatsUtil();
         String payload = "{\"field\":\"value\", \"anotherField\":{\"subfield\": \"otherValue\"}}";
 
         Map<String, Object> currentPathValues = Collections.singletonMap("additionalProperties", "{topElement=metadata, mapValues={test1=value1,test2=value2}}");
-        String updatedPayload = catsUtil.setAdditionalPropertiesToPayload(currentPathValues, payload);
+        String updatedPayload = CatsUtil.setAdditionalPropertiesToPayload(currentPathValues, payload);
         Assertions.assertThat(updatedPayload).contains("metadata").contains("test1");
     }
 
     @Test
     void shouldNotAddTopElement() {
-        CatsUtil catsUtil = new CatsUtil();
         String payload = "{\"field\":\"value\", \"anotherField\":{\"subfield\": \"otherValue\"}}";
 
         Map<String, Object> currentPathValues = Collections.singletonMap("additionalProperties", "{mapValues={test1=value1,test2=value2}}");
-        String updatedPayload = catsUtil.setAdditionalPropertiesToPayload(currentPathValues, payload);
+        String updatedPayload = CatsUtil.setAdditionalPropertiesToPayload(currentPathValues, payload);
         Assertions.assertThat(updatedPayload).doesNotContain("metadata").contains("test1");
     }
 
-    @Test
-    void shouldReturnEmptyFuzzingResultWhenEmptyJson() {
-        CatsUtil catsUtil = new CatsUtil();
-        FuzzingStrategy strategy = FuzzingStrategy.replace().withData("fuzzed");
-        FuzzingResult result = catsUtil.replaceField("", "test", strategy);
-
-        Assertions.assertThat(result.fuzzedValue()).asString().isEmpty();
-        Assertions.assertThat(result.json()).isEmpty();
+    @ParameterizedTest
+    @CsvSource({"test,java.lang.String", "10,java.lang.Integer", "20L,java.lang.Long", "20.34,java.lang.Float"})
+    void shouldConvertToAppropriateType(String value, String typeName) throws ClassNotFoundException {
+        Class<?> expectedType = Class.forName(typeName);
+        Object result = CatsUtil.getAsAppropriateType(value);
+        Assertions.assertThat(result).isInstanceOf(expectedType);
     }
 
     @Test
-    void shouldReplace() {
-        CatsUtil catsUtil = new CatsUtil();
-        String payload = """
-                {
-                  "arrayOfData": [
-                    "FAoe22OkDDln6qHyqALVI1",
-                    "FAoe22OkDDln6qHyqALVI1"
-                  ],
-                  "country": "USA",
-                  "dateTime": "2016-05-24T15:54:14.876Z"
-                }
+    void shouldReplaceJsonArray() {
+        String json = """
+                {"key": [3,4,5]}
                 """;
-        FuzzingResult result = catsUtil.replaceField(payload, "arrayOfData", FuzzingStrategy.trail().withData("test"));
-        Assertions.assertThat(result.json()).contains("test").contains("FAoe22OkDDln6qHyqALVI1test").contains("USA");
+
+        String result = CatsUtil.justReplaceField(json, "key", "replaced").json();
+        Assertions.assertThat(result).contains("replaced").doesNotContain("3", "4", "5");
+    }
+
+    @Test
+    void shouldReturnFileEmptyWhenFileNull() {
+        Assertions.assertThat(CatsUtil.isFileEmpty(null)).isTrue();
+    }
+
+    @Test
+    void shouldReturnFileEmptyWhenFileEmpty() {
+        File file = new File("src/test/resources/empty.yml");
+        Assertions.assertThat(CatsUtil.isFileEmpty(file)).isTrue();
+    }
+
+    @ParameterizedTest
+    @CsvSource({"true,strYYing", "false,stYYng"})
+    void shouldInsertInTheMiddleWithoutReplace(boolean insertWithoutReplace, String toCheck) {
+        String finalString = CatsUtil.insertInTheMiddle("string", "YY", insertWithoutReplace);
+
+        Assertions.assertThat(finalString).isEqualTo(toCheck);
     }
 }

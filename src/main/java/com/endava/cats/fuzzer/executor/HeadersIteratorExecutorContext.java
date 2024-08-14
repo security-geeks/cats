@@ -11,6 +11,9 @@ import lombok.Value;
 import java.util.List;
 import java.util.function.Supplier;
 
+/**
+ * Context used by the HeadersIteratorExecutor.
+ */
 @Builder
 @Value
 public class HeadersIteratorExecutorContext {
@@ -38,4 +41,7 @@ public class HeadersIteratorExecutorContext {
 
     @Builder.Default
     boolean skipAuthHeaders = true;
+
+    @Builder.Default
+    boolean shouldMatchContentType = true;
 }

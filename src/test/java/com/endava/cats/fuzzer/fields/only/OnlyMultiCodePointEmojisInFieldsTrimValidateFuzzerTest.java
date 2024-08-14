@@ -2,13 +2,12 @@ package com.endava.cats.fuzzer.fields.only;
 
 
 import com.endava.cats.args.FilesArguments;
-import com.endava.cats.args.IgnoreArguments;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.args.FilterArguments;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.FuzzingData;
-import com.endava.cats.strategy.FuzzingStrategy;
 import com.endava.cats.report.TestCaseListener;
-import com.endava.cats.util.CatsUtil;
+import com.endava.cats.strategy.FuzzingStrategy;
 import io.quarkus.test.junit.QuarkusTest;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.media.StringSchema;
@@ -23,11 +22,10 @@ import java.util.Map;
 
 @QuarkusTest
 class OnlyMultiCodePointEmojisInFieldsTrimValidateFuzzerTest {
-    private final CatsUtil catsUtil = new CatsUtil();
     private ServiceCaller serviceCaller;
     private TestCaseListener testCaseListener;
     private FilesArguments filesArguments;
-    private IgnoreArguments ignoreArguments;
+    private FilterArguments filterArguments;
 
     private OnlyMultiCodePointEmojisInFieldsTrimValidateFuzzer onlyMultiCodePointEmojisInFieldsTrimValidateFuzzer;
 
@@ -36,13 +34,13 @@ class OnlyMultiCodePointEmojisInFieldsTrimValidateFuzzerTest {
         serviceCaller = Mockito.mock(ServiceCaller.class);
         testCaseListener = Mockito.mock(TestCaseListener.class);
         filesArguments = Mockito.mock(FilesArguments.class);
-        ignoreArguments = Mockito.mock(IgnoreArguments.class);
-        onlyMultiCodePointEmojisInFieldsTrimValidateFuzzer = new OnlyMultiCodePointEmojisInFieldsTrimValidateFuzzer(serviceCaller, testCaseListener, catsUtil, filesArguments, ignoreArguments);
+        filterArguments = Mockito.mock(FilterArguments.class);
+        onlyMultiCodePointEmojisInFieldsTrimValidateFuzzer = new OnlyMultiCodePointEmojisInFieldsTrimValidateFuzzer(serviceCaller, testCaseListener, filesArguments, filterArguments);
     }
 
     @Test
     void shouldProperlyOverrideMethods() {
-        Assertions.assertThat(onlyMultiCodePointEmojisInFieldsTrimValidateFuzzer.getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern()).isEqualTo(ResponseCodeFamily.FOURXX);
+        Assertions.assertThat(onlyMultiCodePointEmojisInFieldsTrimValidateFuzzer.getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX);
         Assertions.assertThat(onlyMultiCodePointEmojisInFieldsTrimValidateFuzzer.skipForHttpMethods()).isEmpty();
 
         FuzzingData data = Mockito.mock(FuzzingData.class);

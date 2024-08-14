@@ -47,6 +47,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /reference-pets:
+    $ref: '#/paths/~1pets~1{id}'
   /pets:
     get:
       summary: List all pets
@@ -95,6 +97,30 @@ paths:
               another:
                 value:
                   breed: dog-no-ref
+      responses:
+        '200':
+          description: pet response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Pet'
+        default:
+          description: unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pets-batch:
+    post:
+      description: Creates a batch of pets in the store.  Duplicates are allowed
+      operationId: addPet
+      requestBody:
+        description: Pet to add to the store
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Pets'
       responses:
         '200':
           description: pet response
@@ -189,6 +215,9 @@ components:
             id:
               type: string
               format: time
+            colors:
+              type: array
+              items: {}
             breed:
               description: Sensitive data that will be kept encrypted in the vault, associated with the Token
               oneOf:
@@ -233,6 +262,27 @@ components:
           additionalProperties:
             type: string
             maxLength: 256
+        creator:
+          title: ''
+          description: ''
+          type: object
+          properties:
+            id:
+              description: ''
+              type: string
+              example: 63d415e0dd0d828c3a878548
+              readOnly: true
+            email:
+              description: ''
+              type: string
+              example: fett@intergalactic.com
+              readOnly: true
+            displayName:
+              description: ''
+              type: string
+              example: Boba Fett
+              readOnly: true
+
     AdditionalPet:
       properties:
         id:
@@ -291,18 +341,29 @@ components:
       oneOf:
         - $ref: '#/components/schemas/Husky'
         - $ref: '#/components/schemas/Labrador'
+      discriminator:
+        propertyName: breedType
+        mapping:
+          "Husky": '#/components/schemas/Husky'
+          "Labrador": '#/components/schemas/Labrador'
     Husky:
       required:
         - breedType
       properties:
         breedType:
           type: string
+          enum:
+            - Husky
+            - Labrador
     Labrador:
       required:
         - breedType
       properties:
         breedType:
           type: string
+          enum:
+            - Husky
+            - Labrador
     NewPet:
       required:
         - name

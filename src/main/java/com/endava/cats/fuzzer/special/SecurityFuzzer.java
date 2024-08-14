@@ -3,17 +3,17 @@ package com.endava.cats.fuzzer.special;
 import com.endava.cats.annotations.SpecialFuzzer;
 import com.endava.cats.args.FilesArguments;
 import com.endava.cats.fuzzer.fields.base.CustomFuzzerBase;
-import com.endava.cats.json.JsonUtils;
 import com.endava.cats.model.CatsField;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.util.CatsDSLWords;
 import com.endava.cats.util.ConsoleUtils;
+import com.endava.cats.util.JsonUtils;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
+import jakarta.inject.Singleton;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.CollectionUtils;
 
-import jakarta.inject.Singleton;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Arrays;
@@ -21,8 +21,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+/**
+ * Fuzzer that will perform fuzzing based on user supplied payloads that also support response verification.
+ */
 @Singleton
 @SpecialFuzzer
 public class SecurityFuzzer implements CustomFuzzerBase {
@@ -30,6 +35,12 @@ public class SecurityFuzzer implements CustomFuzzerBase {
     private final FilesArguments filesArguments;
     private final CustomFuzzerUtil customFuzzerUtil;
 
+    /**
+     * Constructs a new SecurityFuzzer instance.
+     *
+     * @param cp  The FilesArguments object containing the files to be fuzzed.
+     * @param cfu The CustomFuzzerUtil object used to perform custom fuzzing operations.
+     */
     public SecurityFuzzer(FilesArguments cp, CustomFuzzerUtil cfu) {
         this.filesArguments = cp;
         this.customFuzzerUtil = cfu;
@@ -42,34 +53,34 @@ public class SecurityFuzzer implements CustomFuzzerBase {
         }
     }
 
-    protected void processSecurityFuzzerFile(FuzzingData data) {
+    private void processSecurityFuzzerFile(FuzzingData data) {
         Map<String, Object> currentPathValues = this.getCurrentPathValues(data);
         if (currentPathValues != null) {
             currentPathValues.forEach((key, value) -> this.executeTestCases(data, key, value));
         } else {
-            log.skip("Skipping path [{}] for method [{}] as it was not configured in securityFuzzerFile", data.getPath(), data.getMethod());
+            log.skip("Skipping path [{}] for method [{}] as it was not configured in securityFuzzerFile", data.getContractPath(), data.getMethod());
         }
     }
 
-    public List<String> getMissingRequiredKeywords(Map<String, Object> currentTestCase) {
-        List<String> missing = getRequiredKeywords().stream().filter(keyword -> currentTestCase.get(keyword) == null).collect(Collectors.toList());
+    private List<String> getMissingRequiredKeywords(Map<String, Object> currentTestCase) {
+        List<String> missing = Stream.concat(requiredKeywords().stream(), Stream.of(CatsDSLWords.STRINGS_FILE))
+                .filter(keyword -> currentTestCase.get(keyword) == null)
+                .collect(Collectors.toList());
+
         if (currentTestCase.get(CatsDSLWords.TARGET_FIELDS_TYPES) == null && currentTestCase.get(CatsDSLWords.TARGET_FIELDS) == null) {
             missing.add(CatsDSLWords.TARGET_FIELDS + " or " + CatsDSLWords.TARGET_FIELDS_TYPES);
         }
         return missing;
     }
 
-    private List<String> getRequiredKeywords() {
-        return List.of(CatsDSLWords.EXPECTED_RESPONSE_CODE, CatsDSLWords.DESCRIPTION, CatsDSLWords.STRINGS_FILE, CatsDSLWords.HTTP_METHOD);
-    }
-
     private Map<String, Object> getCurrentPathValues(FuzzingData data) {
-        Map<String, Object> currentPathValues = filesArguments.getSecurityFuzzerDetails().get(data.getPath());
+        Map<String, Object> currentPathValues = filesArguments.getSecurityFuzzerDetails().get(data.getContractPath());
         if (CollectionUtils.isEmpty(currentPathValues)) {
             currentPathValues = filesArguments.getSecurityFuzzerDetails().get(CatsDSLWords.ALL);
         }
 
-        currentPathValues = Optional.ofNullable(currentPathValues).orElse(Collections.emptyMap()).entrySet().stream()
+        currentPathValues = Optional.ofNullable(currentPathValues)
+                .orElse(Collections.emptyMap()).entrySet().stream()
                 .filter(stringObjectEntry -> customFuzzerUtil.isMatchingHttpMethod(stringObjectEntry.getValue(), data.getMethod()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
@@ -77,12 +88,14 @@ public class SecurityFuzzer implements CustomFuzzerBase {
     }
 
     private void executeTestCases(FuzzingData data, String key, Object value) {
-        log.config("Path [{}] has the following security configuration [{}]", data.getPath(), value);
+        log.note("Path [{}] has the following security configuration [{}]", data.getContractPath(), value);
         Map<String, Object> individualTestConfig = (Map<String, Object>) value;
 
         List<String> missingRequiredKeywords = this.getMissingRequiredKeywords(individualTestConfig);
         if (!missingRequiredKeywords.isEmpty()) {
-            log.error("Path [{}] is missing the following mandatory entries: {}", data.getPath(), missingRequiredKeywords);
+            String message = "is missing the following mandatory entries: %s".formatted(missingRequiredKeywords);
+            log.error(message);
+            customFuzzerUtil.recordError(message);
             return;
         }
 
@@ -90,7 +103,11 @@ public class SecurityFuzzer implements CustomFuzzerBase {
 
         try {
             log.start("Parsing stringsFile...");
-            List<String> nastyStrings = Files.readAllLines(Paths.get(stringsFile));
+            List<String> nastyStrings = Files.readAllLines(Paths.get(stringsFile))
+                    .stream()
+                    .filter(Predicate.not(String::isBlank))
+                    .filter(Predicate.not(line -> line.startsWith("# ")))
+                    .toList();
             log.complete("stringsFile parsed successfully! Found {} entries", nastyStrings.size());
             List<String> targetFields = this.getTargetFields(individualTestConfig, data);
             this.fuzzFields(data, key, individualTestConfig, nastyStrings, targetFields);
@@ -101,9 +118,14 @@ public class SecurityFuzzer implements CustomFuzzerBase {
 
     private void fuzzFields(FuzzingData data, String key, Map<String, Object> individualTestConfig, List<String> nastyStrings, List<String> targetFields) {
         log.debug("Target fields {}", targetFields);
+
         for (String targetField : targetFields) {
             log.info("Fuzzing field [{}]", targetField);
-            Map<String, Object> individualTestConfigClone = individualTestConfig.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            Map<String, Object> individualTestConfigClone = individualTestConfig
+                    .entrySet()
+                    .stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
             individualTestConfigClone.put(targetField, nastyStrings);
             individualTestConfigClone.put(CatsDSLWords.DESCRIPTION, individualTestConfig.get(CatsDSLWords.DESCRIPTION) + ", field [" + targetField + "]");
             individualTestConfigClone.remove(CatsDSLWords.TARGET_FIELDS);
@@ -124,8 +146,9 @@ public class SecurityFuzzer implements CustomFuzzerBase {
                 .filter(name -> !JsonUtils.getVariableFromJson(data.getPayload(), name).equals(JsonUtils.NOT_SET))
                 .collect(Collectors.toList());
 
-        /*we also add the HTTP headers in this list. the actual split logic will be handled in CustomFuzzerUtil*/
+        /*we also add the http_headers and http_body in this list. the actual split logic will be handled in CustomFuzzerUtil*/
         catsFields.add(Arrays.stream(targetFieldsTypes).filter(type -> type.equalsIgnoreCase(CatsDSLWords.CATS_HEADERS)).findFirst().orElse(""));
+        catsFields.add(Arrays.stream(targetFieldsTypes).filter(type -> type.equalsIgnoreCase(CatsDSLWords.CATS_BODY_FUZZ)).findFirst().orElse(""));
         catsFields.addAll(Arrays.asList(targetFields));
         catsFields.removeIf(StringUtils::isBlank);
 
@@ -133,8 +156,11 @@ public class SecurityFuzzer implements CustomFuzzerBase {
     }
 
     private String[] extractListEntry(Map<String, Object> individualTestConfig, String key) {
-        return String.valueOf(individualTestConfig.getOrDefault(key, "")).replace("[", "")
-                .replace(" ", "").replace("]", "").split(",");
+        return String.valueOf(individualTestConfig.getOrDefault(key, ""))
+                .replace("[", "")
+                .replace(" ", "")
+                .replace("]", "")
+                .split(",");
     }
 
     @Override
@@ -148,8 +174,7 @@ public class SecurityFuzzer implements CustomFuzzerBase {
     }
 
     @Override
-    public List<String> reservedWords() {
-        return Arrays.asList(CatsDSLWords.EXPECTED_RESPONSE_CODE, CatsDSLWords.DESCRIPTION, CatsDSLWords.OUTPUT, CatsDSLWords.VERIFY, CatsDSLWords.STRINGS_FILE, CatsDSLWords.TARGET_FIELDS,
-                CatsDSLWords.TARGET_FIELDS_TYPES, CatsDSLWords.MAP_VALUES, CatsDSLWords.ONE_OF_SELECTION, CatsDSLWords.ADDITIONAL_PROPERTIES, CatsDSLWords.ELEMENT, CatsDSLWords.HTTP_METHOD);
+    public List<String> requiredKeywords() {
+        return List.of(CatsDSLWords.EXPECTED_RESPONSE_CODE, CatsDSLWords.DESCRIPTION, CatsDSLWords.HTTP_METHOD);
     }
 }

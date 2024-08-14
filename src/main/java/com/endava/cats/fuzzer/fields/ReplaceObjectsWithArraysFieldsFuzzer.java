@@ -3,15 +3,24 @@ package com.endava.cats.fuzzer.fields;
 import com.endava.cats.annotations.FieldFuzzer;
 import com.endava.cats.fuzzer.executor.FieldsIteratorExecutor;
 import com.endava.cats.fuzzer.fields.base.BaseReplaceFieldsFuzzer;
-import com.endava.cats.json.JsonUtils;
+import com.endava.cats.util.JsonUtils;
 import com.endava.cats.model.FuzzingData;
 import jakarta.inject.Singleton;
 
 import java.util.List;
 
+/**
+ * Fuzzer that replaces JSON objects with arrays.
+ */
 @FieldFuzzer
 @Singleton
 public class ReplaceObjectsWithArraysFieldsFuzzer extends BaseReplaceFieldsFuzzer {
+
+    /**
+     * Creates a new ReplaceObjectsWithArraysFieldsFuzzer instance.
+     *
+     * @param ce the executor
+     */
     public ReplaceObjectsWithArraysFieldsFuzzer(FieldsIteratorExecutor ce) {
         super(ce);
     }

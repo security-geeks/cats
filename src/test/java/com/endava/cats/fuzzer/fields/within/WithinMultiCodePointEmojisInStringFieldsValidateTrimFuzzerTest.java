@@ -1,12 +1,11 @@
 package com.endava.cats.fuzzer.fields.within;
 
 import com.endava.cats.args.FilesArguments;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.strategy.FuzzingStrategy;
-import com.endava.cats.util.CatsUtil;
 import io.quarkus.test.junit.QuarkusTest;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.media.StringSchema;
@@ -20,7 +19,6 @@ import java.util.Map;
 
 @QuarkusTest
 class WithinMultiCodePointEmojisInStringFieldsValidateTrimFuzzerTest {
-    private final CatsUtil catsUtil = new CatsUtil();
     private ServiceCaller serviceCaller;
     private TestCaseListener testCaseListener;
     private FilesArguments filesArguments;
@@ -31,7 +29,7 @@ class WithinMultiCodePointEmojisInStringFieldsValidateTrimFuzzerTest {
         serviceCaller = Mockito.mock(ServiceCaller.class);
         testCaseListener = Mockito.mock(TestCaseListener.class);
         filesArguments = Mockito.mock(FilesArguments.class);
-        withinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer = new WithinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer(serviceCaller, testCaseListener, catsUtil, filesArguments);
+        withinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer = new WithinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer(serviceCaller, testCaseListener, filesArguments);
         Mockito.when(testCaseListener.isFieldNotADiscriminator(Mockito.anyString())).thenReturn(true);
         Mockito.when(testCaseListener.isFieldNotADiscriminator("pet#type")).thenReturn(false);
     }
@@ -45,9 +43,9 @@ class WithinMultiCodePointEmojisInStringFieldsValidateTrimFuzzerTest {
         FuzzingStrategy fuzzingStrategy = withinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer.getFieldFuzzingStrategy(data, "field").get(1);
 
         Assertions.assertThat(fuzzingStrategy.getData().toString()).contains("\uD83D\uDC68\u200D\uD83C\uDFED️");
-        Assertions.assertThat(withinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer.getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern()).isEqualTo(ResponseCodeFamily.FOURXX);
-        Assertions.assertThat(withinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualTo(ResponseCodeFamily.FOURXX);
-        Assertions.assertThat(withinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualTo(ResponseCodeFamily.FOURXX);
+        Assertions.assertThat(withinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer.getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX);
+        Assertions.assertThat(withinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer.getExpectedHttpCodeWhenOptionalFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX);
+        Assertions.assertThat(withinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer.getExpectedHttpCodeWhenRequiredFieldsAreFuzzed()).isEqualTo(ResponseCodeFamilyPredefined.FOURXX);
 
         Assertions.assertThat(withinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer.description()).isNotNull();
         Assertions.assertThat(withinMultiCodePointEmojisInStringFieldsValidateTrimFuzzer.typeOfDataSentToTheService()).isNotNull();

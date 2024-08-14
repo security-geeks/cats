@@ -1,14 +1,16 @@
 package com.endava.cats.fuzzer.fields.base;
 
 import com.endava.cats.args.FilesArguments;
+import com.endava.cats.fuzzer.api.Fuzzer;
 import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
+import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
-import com.endava.cats.util.FuzzingResult;
-import com.endava.cats.strategy.FuzzingStrategy;
 import com.endava.cats.report.TestCaseExporter;
 import com.endava.cats.report.TestCaseListener;
-import com.endava.cats.util.CatsUtil;
+import com.endava.cats.strategy.FuzzingStrategy;
+import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import io.swagger.v3.oas.models.media.Schema;
@@ -33,8 +35,6 @@ class BaseFieldsFuzzerTest {
     private ServiceCaller serviceCaller;
     @InjectSpy
     private TestCaseListener testCaseListener;
-    @InjectSpy
-    private CatsUtil catsUtil;
     private FilesArguments filesArguments;
 
     private BaseFieldsFuzzer baseFieldsFuzzer;
@@ -43,30 +43,44 @@ class BaseFieldsFuzzerTest {
     void setup() {
         serviceCaller = Mockito.mock(ServiceCaller.class);
         filesArguments = Mockito.mock(FilesArguments.class);
+        Mockito.when(serviceCaller.call(Mockito.any())).thenReturn(CatsResponse.builder().responseCode(200).body("{}").build());
         ReflectionTestUtils.setField(testCaseListener, "testCaseExporter", Mockito.mock(TestCaseExporter.class));
     }
 
     @Test
     void givenAFieldWithAReplaceFuzzingStrategyWithANonPrimitiveField_whenTheFieldIsFuzzedAndNoExceptionOccurs_thenTestsAreSkipped() {
-        baseFieldsFuzzer = new MyBaseFieldsFuzzer(serviceCaller, testCaseListener, catsUtil, filesArguments);
+        baseFieldsFuzzer = new MyBaseFieldsFuzzer(serviceCaller, testCaseListener, filesArguments, "");
         FuzzingData data = Mockito.mock(FuzzingData.class);
         Set<String> fields = Collections.singleton("field");
         Mockito.when(data.getAllFieldsByHttpMethod()).thenReturn(fields);
         Mockito.when(data.getPayload()).thenReturn("{}");
 
         baseFieldsFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener).skipTest(Mockito.any(), Mockito.eq("Field could not be fuzzed. Possible reasons: field is not a primitive, is a discriminator or is not matching the Fuzzer schemas"));
+        Mockito.verify(testCaseListener).skipTest(Mockito.any(), Mockito.eq("field could not be fuzzed. Possible reasons: field is not a primitive, is a discriminator, is passed as refData or is not matching the Fuzzer schemas"));
     }
 
     @Test
-    void givenAFieldWithASkipFuzzingStrategy_whenTheFieldIsFuzzedAndNoExceptionOccurs_thenTestIsSkipped() {
-        baseFieldsFuzzer = new MyBaseFieldsSkipFuzzer(serviceCaller, testCaseListener, catsUtil, filesArguments);
+    void shouldSkipFuzzerWhenSkipStrategy() {
+        baseFieldsFuzzer = new MyBaseFieldsFuzzer(serviceCaller, testCaseListener, filesArguments, "");
+        FuzzingData data = Mockito.mock(FuzzingData.class);
+        Set<String> fields = Collections.singleton("field");
+        Mockito.when(data.getAllFieldsByHttpMethod()).thenReturn(fields);
+        Mockito.when(data.getPayload()).thenReturn("{}");
+        testCaseListener.createAndExecuteTest(Mockito.mock(PrettyLogger.class), Mockito.mock(Fuzzer.class), () -> {
+            baseFieldsFuzzer.process(data, "field", FuzzingStrategy.skip().withData("Skipping test"));
+        }, data);
+        Mockito.verify(testCaseListener).skipTest(Mockito.any(), Mockito.eq("Skipping test"));
+    }
+
+    @Test
+    void givenAFieldWithASkipFuzzingStrategy_whenTheFieldIsFuzzedAndNoExceptionOccurs_thenTestIsNotRun() {
+        baseFieldsFuzzer = new MyBaseFieldsSkipFuzzer(serviceCaller, testCaseListener, filesArguments);
         FuzzingData data = Mockito.mock(FuzzingData.class);
         Set<String> fields = Collections.singleton("field");
         Mockito.when(data.getAllFieldsByHttpMethod()).thenReturn(fields);
 
         baseFieldsFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener).skipTest(Mockito.any(), Mockito.eq(""));
+        Mockito.verifyNoInteractions(testCaseListener);
     }
 
     @Test
@@ -74,12 +88,11 @@ class BaseFieldsFuzzerTest {
         FuzzingData data = createFuzzingData();
 
         baseFieldsFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.any());
+        Mockito.verify(testCaseListener).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.any(), Mockito.eq(true), Mockito.eq(true));
     }
 
     @NotNull
     private FuzzingData createFuzzingData() {
-        FuzzingResult fuzzingResult = new FuzzingResult("{}", null);
         FuzzingData data = Mockito.mock(FuzzingData.class);
         Set<String> fields = Collections.singleton("field");
         Map<String, Schema> schemaMap = new HashMap<>();
@@ -88,9 +101,7 @@ class BaseFieldsFuzzerTest {
         Mockito.when(data.getRequestPropertyTypes()).thenReturn(schemaMap);
         Mockito.when(data.getPayload()).thenReturn("{\"field\": 2}");
 
-        CatsUtil mockCatsUtil = Mockito.mock(CatsUtil.class);
-        Mockito.when(mockCatsUtil.replaceField(Mockito.eq("{\"field\": 2}"), Mockito.eq("field"), Mockito.any())).thenReturn(fuzzingResult);
-        baseFieldsFuzzer = new MyBaseFieldsFuzzer(serviceCaller, testCaseListener, mockCatsUtil, filesArguments);
+        baseFieldsFuzzer = new MyBaseFieldsFuzzer(serviceCaller, testCaseListener, filesArguments, "");
 
         Mockito.doNothing().when(testCaseListener).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.any());
         return data;
@@ -100,8 +111,7 @@ class BaseFieldsFuzzerTest {
     void shouldNotRunWhenNoFields() {
         FuzzingData data = Mockito.mock(FuzzingData.class);
         Mockito.when(data.getAllFieldsByHttpMethod()).thenReturn(Collections.emptySet());
-        CatsUtil mockCatsUtil = Mockito.mock(CatsUtil.class);
-        baseFieldsFuzzer = new MyBaseFieldsFuzzer(serviceCaller, testCaseListener, mockCatsUtil, filesArguments);
+        baseFieldsFuzzer = new MyBaseFieldsFuzzer(serviceCaller, testCaseListener, filesArguments, "");
 
         baseFieldsFuzzer.fuzz(data);
         Mockito.verifyNoInteractions(testCaseListener);
@@ -113,7 +123,7 @@ class BaseFieldsFuzzerTest {
         BaseFieldsFuzzer spyFuzzer = Mockito.spy(baseFieldsFuzzer);
         Mockito.when(spyFuzzer.isFuzzerWillingToFuzz(Mockito.eq(data), Mockito.anyString())).thenReturn(false);
         spyFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener).skipTest(Mockito.any(), Mockito.eq("Field could not be fuzzed. Possible reasons: field is not a primitive, is a discriminator or is not matching the Fuzzer schemas"));
+        Mockito.verify(testCaseListener).skipTest(Mockito.any(), Mockito.eq("field could not be fuzzed. Possible reasons: field is not a primitive, is a discriminator, is passed as refData or is not matching the Fuzzer schemas"));
     }
 
     @Test
@@ -122,13 +132,12 @@ class BaseFieldsFuzzerTest {
         BaseFieldsFuzzer spyFuzzer = Mockito.spy(baseFieldsFuzzer);
         Mockito.when(spyFuzzer.skipForFields()).thenReturn(List.of("field"));
         spyFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener).skipTest(Mockito.any(), Mockito.eq("Field could not be fuzzed. Possible reasons: field is not a primitive, is a discriminator or is not matching the Fuzzer schemas"));
+        Mockito.verify(testCaseListener).skipTest(Mockito.any(), Mockito.eq("field could not be fuzzed. Possible reasons: field is not a primitive, is a discriminator, is passed as refData or is not matching the Fuzzer schemas"));
     }
 
     @ParameterizedTest
     @CsvSource(value = {"null,[a-z]+,200", "cats,[a-z]+,200", "CATS,[a-z]+,400"}, nullValues = "null")
     void shouldExpectDifferentCodesBasedOnFuzzedFieldMatchingPattern(String fuzzedValue, String pattern, String responseCode) {
-        FuzzingResult fuzzingResult = new FuzzingResult("{\"field\":\"test\"}", fuzzedValue);
         FuzzingData data = Mockito.mock(FuzzingData.class);
         Set<String> fields = Collections.singleton("field");
         Map<String, Schema> schemaMap = new HashMap<>();
@@ -139,19 +148,19 @@ class BaseFieldsFuzzerTest {
         Mockito.when(data.getRequestPropertyTypes()).thenReturn(schemaMap);
         Mockito.when(data.getPayload()).thenReturn("{\"field\": 2}");
 
-        CatsUtil mockCatsUtil = Mockito.mock(CatsUtil.class);
-        Mockito.when(mockCatsUtil.replaceField(Mockito.eq("{\"field\": 2}"), Mockito.eq("field"), Mockito.any())).thenReturn(fuzzingResult);
-        baseFieldsFuzzer = new MyBaseFieldsFuzzer(serviceCaller, testCaseListener, mockCatsUtil, filesArguments);
+        baseFieldsFuzzer = new MyBaseFieldsFuzzer(serviceCaller, testCaseListener, filesArguments, fuzzedValue);
         Mockito.doNothing().when(testCaseListener).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.any());
 
         baseFieldsFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamily.from(responseCode)));
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamilyPredefined.from(responseCode)), Mockito.eq(true), Mockito.eq(true));
     }
 
     static class MyBaseFieldsFuzzer extends BaseFieldsFuzzer {
+        private String fuzzedValue;
 
-        public MyBaseFieldsFuzzer(ServiceCaller sc, TestCaseListener lr, CatsUtil cu, FilesArguments cp) {
-            super(sc, lr, cu, cp);
+        public MyBaseFieldsFuzzer(ServiceCaller sc, TestCaseListener lr, FilesArguments cp, String fuzzedValue) {
+            super(sc, lr, cp);
+            this.fuzzedValue = fuzzedValue;
         }
 
         @Override
@@ -161,22 +170,22 @@ class BaseFieldsFuzzerTest {
 
         @Override
         protected ResponseCodeFamily getExpectedHttpCodeWhenRequiredFieldsAreFuzzed() {
-            return ResponseCodeFamily.FOURXX;
+            return ResponseCodeFamilyPredefined.FOURXX;
         }
 
         @Override
         protected ResponseCodeFamily getExpectedHttpCodeWhenOptionalFieldsAreFuzzed() {
-            return ResponseCodeFamily.TWOXX;
+            return ResponseCodeFamilyPredefined.TWOXX;
         }
 
         @Override
         protected ResponseCodeFamily getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern() {
-            return ResponseCodeFamily.FOURXX;
+            return ResponseCodeFamilyPredefined.FOURXX;
         }
 
         @Override
         protected List<FuzzingStrategy> getFieldFuzzingStrategy(FuzzingData data, String fuzzedField) {
-            return Collections.singletonList(FuzzingStrategy.replace());
+            return Collections.singletonList(FuzzingStrategy.replace().withData(fuzzedValue));
         }
 
         @Override
@@ -187,8 +196,8 @@ class BaseFieldsFuzzerTest {
 
     static class MyBaseFieldsSkipFuzzer extends BaseFieldsFuzzer {
 
-        public MyBaseFieldsSkipFuzzer(ServiceCaller sc, TestCaseListener lr, CatsUtil cu, FilesArguments cp) {
-            super(sc, lr, cu, cp);
+        public MyBaseFieldsSkipFuzzer(ServiceCaller sc, TestCaseListener lr, FilesArguments cp) {
+            super(sc, lr, cp);
         }
 
         @Override

@@ -1,20 +1,29 @@
 package com.endava.cats.fuzzer.contract;
 
 import com.endava.cats.annotations.LinterFuzzer;
+import com.endava.cats.http.ResponseCodeFamily;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
 import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
-
 import jakarta.inject.Singleton;
+
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Checks that http response codes are valid (between 100 and 599).
+ */
 @LinterFuzzer
 @Singleton
 public class HttpStatusCodeInRangeLinterFuzzer extends BaseLinterFuzzer {
     private final PrettyLogger log = PrettyLoggerFactory.getLogger(this.getClass());
 
+    /**
+     * Creates a new HttpStatusCodeInRangeLinterFuzzer instance.
+     *
+     * @param tcl the test case listener
+     */
     public HttpStatusCodeInRangeLinterFuzzer(TestCaseListener tcl) {
         super(tcl);
     }
@@ -25,7 +34,7 @@ public class HttpStatusCodeInRangeLinterFuzzer extends BaseLinterFuzzer {
         testCaseListener.addExpectedResult(log, "All defined response codes must be between 100 and 599");
 
         Set<String> notMatchingResponseCodes = data.getResponseCodes().stream()
-                .filter(code -> !code.equalsIgnoreCase("default") && (Integer.parseInt(code) < 100 || Integer.parseInt(code) > 599)).collect(Collectors.toSet());
+                .filter(code -> !code.equalsIgnoreCase("default") && !ResponseCodeFamily.isValidCode(code)).collect(Collectors.toSet());
 
         if (notMatchingResponseCodes.isEmpty()) {
             testCaseListener.reportResultInfo(log, data, "All defined response codes are valid!");

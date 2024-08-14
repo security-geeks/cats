@@ -3,13 +3,12 @@ package com.endava.cats.fuzzer.fields;
 import com.endava.cats.args.FilesArguments;
 import com.endava.cats.args.MatchArguments;
 import com.endava.cats.fuzzer.executor.FieldsIteratorExecutor;
-import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseExporter;
 import com.endava.cats.report.TestCaseListener;
-import com.endava.cats.util.CatsUtil;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.mockito.InjectSpy;
 import io.swagger.v3.oas.models.media.Schema;
@@ -28,8 +27,6 @@ class DefaultValuesInFieldsFuzzerTest {
     ServiceCaller serviceCaller;
     @InjectSpy
     TestCaseListener testCaseListener;
-    @InjectSpy
-    CatsUtil catsUtil;
     private FieldsIteratorExecutor catsExecutor;
     private DefaultValuesInFieldsFuzzer defaultValuesInFieldsFuzzer;
 
@@ -37,7 +34,7 @@ class DefaultValuesInFieldsFuzzerTest {
     void setup() {
         serviceCaller = Mockito.mock(ServiceCaller.class);
         ReflectionTestUtils.setField(testCaseListener, "testCaseExporter", Mockito.mock(TestCaseExporter.class));
-        catsExecutor = new FieldsIteratorExecutor(serviceCaller, testCaseListener, catsUtil, Mockito.mock(MatchArguments.class), Mockito.mock(FilesArguments.class));
+        catsExecutor = new FieldsIteratorExecutor(serviceCaller, testCaseListener, Mockito.mock(MatchArguments.class), Mockito.mock(FilesArguments.class));
         defaultValuesInFieldsFuzzer = new DefaultValuesInFieldsFuzzer(catsExecutor);
     }
 
@@ -80,7 +77,7 @@ class DefaultValuesInFieldsFuzzerTest {
                     {"myField": 3}
                 """);
         defaultValuesInFieldsFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(0)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamily.FOURXX));
+        Mockito.verify(testCaseListener, Mockito.times(0)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamilyPredefined.FOURXX));
     }
 
     @Test
@@ -99,6 +96,6 @@ class DefaultValuesInFieldsFuzzerTest {
                     }
                 """);
         defaultValuesInFieldsFuzzer.fuzz(data);
-        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamily.TWOXX));
+        Mockito.verify(testCaseListener, Mockito.times(1)).reportResult(Mockito.any(), Mockito.eq(data), Mockito.any(), Mockito.eq(ResponseCodeFamilyPredefined.TWOXX));
     }
 }

@@ -10,33 +10,40 @@ import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Supplier;
 
 /**
  * Base class for all Contract Fuzzers. If you need additional behaviour please make sure you don't break existing Fuzzers.
  * Contract Fuzzers are only focused on contract following best practices without calling the actual service.
  */
 public abstract class BaseLinterFuzzer implements Fuzzer {
-    protected static final String DESCRIPTION = "description";
-    protected static final String COMMA = ", ";
-    protected static final String IS_EMPTY = " is empty";
-    protected static final String IS_TOO_SHORT = " is too short";
-    protected static final String EMPTY = "";
+    /**
+     * Used for cases when the result is not available or not applicable.
+     */
+    protected static final String N_A = "N/A";
+    /**
+     * The test case listener.
+     */
     protected final TestCaseListener testCaseListener;
-    protected final List<String> fuzzedPaths = new ArrayList<>();
+    private final List<String> fuzzedPaths = new ArrayList<>();
     private final PrettyLogger log = PrettyLoggerFactory.getLogger(this.getClass());
 
+    /**
+     * Creates a new instance of subclasses.
+     *
+     * @param tcl the test case listener
+     */
     protected BaseLinterFuzzer(TestCaseListener tcl) {
         this.testCaseListener = tcl;
     }
 
     @Override
     public void fuzz(FuzzingData data) {
-        if (!fuzzedPaths.contains(this.runKey(data))) {
-            testCaseListener.createAndExecuteTest(log, this, () -> addDefaultsAndProcess(data));
-
-            fuzzedPaths.add(this.runKey(data));
+        if (fuzzedPaths.contains(this.runKey(data))) {
+            return;
         }
+
+        testCaseListener.createAndExecuteTest(log, this, () -> addDefaultsAndProcess(data), data);
+        fuzzedPaths.add(this.runKey(data));
     }
 
     /**
@@ -49,6 +56,7 @@ public abstract class BaseLinterFuzzer implements Fuzzer {
         testCaseListener.addPath(data.getPath());
         testCaseListener.addContractPath(data.getContractPath());
         testCaseListener.addFullRequestPath("NA");
+
         CatsRequest request = CatsRequest.empty();
         request.setHttpMethod(String.valueOf(data.getMethod()));
         testCaseListener.addRequest(request);
@@ -56,11 +64,15 @@ public abstract class BaseLinterFuzzer implements Fuzzer {
         this.process(data);
     }
 
-    protected <T> String getOrEmpty(Supplier<T> function, String toReturn) {
-        if (function.get() == null) {
-            return toReturn;
-        }
-        return EMPTY;
+    /**
+     * Checks if the given string represents an error condition.
+     * The method returns true if the string is not equal to the constant {@code N_A}, indicating the presence of errors.
+     *
+     * @param s The string to be checked for error conditions.
+     * @return {@code true} if the string represents an error condition, {@code false} otherwise.
+     */
+    protected boolean hasErrors(String s) {
+        return !N_A.equals(s);
     }
 
     /**

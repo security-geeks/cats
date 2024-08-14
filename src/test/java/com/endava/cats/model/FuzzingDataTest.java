@@ -2,6 +2,7 @@ package com.endava.cats.model;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.swagger.v3.oas.models.media.ComposedSchema;
+import io.swagger.v3.oas.models.media.NumberSchema;
 import io.swagger.v3.oas.models.media.ObjectSchema;
 import io.swagger.v3.oas.models.media.Schema;
 import io.swagger.v3.oas.models.media.StringSchema;
@@ -87,6 +88,81 @@ class FuzzingDataTest {
                 .containsExactlyInAnyOrder("firstName", "address#street", "address#zipCode");
     }
 
+    @ParameterizedTest
+    @CsvSource({"number,1", "string,2"})
+    void shouldIncludeBasedOnFieldType(String type, int expected) {
+        ObjectSchema baseSchema = new ObjectSchema();
+        baseSchema.setProperties(this.getBasePropertiesMapWithSubfields());
+        FuzzingData data = FuzzingData.builder().schemaMap(getBasePropertiesMapWithSubfields())
+                .requestPropertyTypes(this.buildRequestPropertyTypes())
+                .reqSchema(baseSchema)
+                .includeFieldTypes(List.of(type))
+                .build();
+        Set<CatsField> catsFields = data.getAllFieldsAsCatsFields();
+
+        Assertions.assertThat(catsFields).hasSize(expected);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"number,3", "string,2"})
+    void shouldExcludeBasedOnFieldType(String type, int expected) {
+        ObjectSchema baseSchema = new ObjectSchema();
+        baseSchema.setProperties(this.getBasePropertiesMapWithSubfields());
+        FuzzingData data = FuzzingData.builder().schemaMap(getBasePropertiesMapWithSubfields())
+                .requestPropertyTypes(this.buildRequestPropertyTypes())
+                .reqSchema(baseSchema)
+                .skipFieldTypes(List.of(type))
+                .build();
+        Set<CatsField> catsFields = data.getAllFieldsAsCatsFields();
+
+        Assertions.assertThat(catsFields).hasSize(expected);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"street,2", "cats,0"})
+    void shouldIncludeBasedOnFieldFormat(String format, int expected) {
+        ObjectSchema baseSchema = new ObjectSchema();
+        baseSchema.setProperties(this.getBasePropertiesMapWithSubfields());
+        FuzzingData data = FuzzingData.builder().schemaMap(getBasePropertiesMapWithSubfields())
+                .requestPropertyTypes(this.buildRequestPropertyTypes())
+                .reqSchema(baseSchema)
+                .includeFieldFormats(List.of(format))
+                .build();
+        Set<CatsField> catsFields = data.getAllFieldsAsCatsFields();
+
+        Assertions.assertThat(catsFields).hasSize(expected);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"street,2", "cats,4"})
+    void shouldExcludeBasedOnFieldFormat(String format, int expected) {
+        ObjectSchema baseSchema = new ObjectSchema();
+        baseSchema.setProperties(this.getBasePropertiesMapWithSubfields());
+        FuzzingData data = FuzzingData.builder().schemaMap(getBasePropertiesMapWithSubfields())
+                .requestPropertyTypes(this.buildRequestPropertyTypes())
+                .reqSchema(baseSchema)
+                .skipFieldFormats(List.of(format))
+                .build();
+        Set<CatsField> catsFields = data.getAllFieldsAsCatsFields();
+
+        Assertions.assertThat(catsFields).hasSize(expected);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"address#street,3", "cats,4"})
+    void shouldExcludeBasedOnFieldName(String name, int expected) {
+        ObjectSchema baseSchema = new ObjectSchema();
+        baseSchema.setProperties(this.getBasePropertiesMapWithSubfields());
+        FuzzingData data = FuzzingData.builder().schemaMap(getBasePropertiesMapWithSubfields())
+                .requestPropertyTypes(this.buildRequestPropertyTypes())
+                .reqSchema(baseSchema)
+                .skippedFieldsForAllFuzzers(List.of(name))
+                .build();
+        Set<CatsField> catsFields = data.getAllFieldsAsCatsFields();
+
+        Assertions.assertThat(catsFields).hasSize(expected);
+    }
+
     @Test
     void shouldGetPowerSet() {
         ObjectSchema baseSchema = new ObjectSchema();
@@ -108,6 +184,47 @@ class FuzzingDataTest {
         Assertions.assertThat(setOfFields).hasSize(expected);
     }
 
+    @Test
+    void shouldReturnContentTypeWhenPresent() {
+        FuzzingData data = FuzzingData.builder().responseContentTypes(Map.of("200", List.of("application/json", "application/v2+json"))).build();
+        List<String> contentTypes = data.getContentTypesByResponseCode("200");
+
+        Assertions.assertThat(contentTypes).containsOnly("application/json", "application/v2+json");
+    }
+
+    @Test
+    void shouldReturnDefaultContentType() {
+        FuzzingData data = FuzzingData.builder().responseContentTypes(Map.of("200", List.of("application/json", "application/v2+json"))).build();
+        List<String> contentTypes = data.getContentTypesByResponseCode("300");
+
+        Assertions.assertThat(contentTypes).containsOnly("application/json");
+    }
+
+    @Test
+    void shouldReturnSetOfSetsWithHalfSize() {
+        Set<String> fields = Set.of("a", "b", "c", "d");
+        Set<Set<String>> allSets = FuzzingData.SetFuzzingStrategy.getAllSetsWithMinSize(fields, 0);
+        Assertions.assertThat(allSets).hasSize(10)
+                .contains(Set.of("a"), Set.of("b"), Set.of("a", "b"))
+                .doesNotContain(Set.of("a", "b", "c", "d"));
+    }
+
+    @Test
+    void shouldReturnSizeOfInitialSetWhenMaxFieldToRemoveBiggerThanSize() {
+        Set<String> fields = Set.of("a", "b", "c", "d");
+        Set<Set<String>> allSets = FuzzingData.SetFuzzingStrategy.getAllSetsWithMinSize(fields, 10);
+        Assertions.assertThat(allSets).hasSize(15).contains(Set.of("a"), Set.of("b"), Set.of("a", "b", "c", "d"));
+    }
+
+    @Test
+    void shouldReturnSetsUpToMaxFieldToRemove() {
+        Set<String> fields = Set.of("a", "b", "c", "d");
+        Set<Set<String>> allSets = FuzzingData.SetFuzzingStrategy.getAllSetsWithMinSize(fields, 3);
+        Assertions.assertThat(allSets).hasSize(14)
+                .contains(Set.of("a"), Set.of("b"), Set.of("a", "b", "c"))
+                .doesNotContain(Set.of("a", "b", "c", "d"));
+    }
+
     public Map<String, Schema> getBasePropertiesRequired() {
         Map<String, Schema> schemaMap = new HashMap<>();
         schemaMap.put("address", new StringSchema());
@@ -118,10 +235,10 @@ class FuzzingDataTest {
 
     public Map<String, Schema> buildRequestPropertyTypes() {
         Map<String, Schema> schemaMap = new HashMap<>();
-        schemaMap.put("firstName", new StringSchema());
+        schemaMap.put("firstName", new StringSchema().format("street"));
         schemaMap.put("lastName", new StringSchema());
-        schemaMap.put("address#street", new StringSchema());
-        schemaMap.put("address#zipCode", new StringSchema());
+        schemaMap.put("address#street", new StringSchema().format("street"));
+        schemaMap.put("address#zipCode", new NumberSchema());
         schemaMap.put("address", new ObjectSchema());
 
         return schemaMap;
@@ -129,12 +246,12 @@ class FuzzingDataTest {
 
     public Map<String, Schema> getBasePropertiesMapWithSubfields() {
         Map<String, Schema> schemaMap = new HashMap<>();
-        schemaMap.put("firstName", new StringSchema());
+        schemaMap.put("firstName", new StringSchema().format("street"));
 
         ObjectSchema objectSchema = new ObjectSchema();
         Map<String, Schema> addressMap = new HashMap<>();
-        addressMap.put("street", new StringSchema());
-        addressMap.put("zipCode", new StringSchema());
+        addressMap.put("street", new StringSchema().format("street"));
+        addressMap.put("zipCode", new NumberSchema());
         objectSchema.setProperties(addressMap);
         objectSchema.setRequired(Arrays.asList("zipCode", "street"));
         objectSchema.set$ref("test/address");

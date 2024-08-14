@@ -1,21 +1,29 @@
 package com.endava.cats.fuzzer.http;
 
-import com.endava.cats.fuzzer.api.Fuzzer;
 import com.endava.cats.annotations.HttpFuzzer;
+import com.endava.cats.fuzzer.api.Fuzzer;
 import com.endava.cats.http.HttpMethod;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.util.ConsoleUtils;
-
 import jakarta.inject.Singleton;
+
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Fuzzer that sends non rest HTTP methods, typically specific to WebDAV.
+ */
 @Singleton
 @HttpFuzzer
 public class NonRestHttpMethodsFuzzer implements Fuzzer {
     private final List<String> fuzzedPaths = new ArrayList<>();
     private final HttpMethodFuzzerUtil httpMethodFuzzerUtil;
 
+    /**
+     * Creates a new NonRestHttpMethodsFuzzer instance.
+     *
+     * @param hmfu the utility class used to execute the logic
+     */
     public NonRestHttpMethodsFuzzer(HttpMethodFuzzerUtil hmfu) {
         this.httpMethodFuzzerUtil = hmfu;
     }
@@ -32,7 +40,7 @@ public class NonRestHttpMethodsFuzzer implements Fuzzer {
 
     @Override
     public String description() {
-        return "iterate through a list of HTTP method specific to the WebDav protocol that are not expected to be implemented by REST APIs";
+        return "iterate through a list of HTTP methods specific to the WebDAV protocol that are not expected to be implemented by REST APIs";
     }
 
     @Override

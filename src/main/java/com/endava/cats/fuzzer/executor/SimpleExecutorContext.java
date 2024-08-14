@@ -15,8 +15,10 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.function.BiConsumer;
-import java.util.function.Predicate;
 
+/**
+ * Context used by the SimpleExecutor to execute fuzzing logic.
+ */
 @Builder
 @Value
 public class SimpleExecutorContext {
@@ -25,12 +27,13 @@ public class SimpleExecutorContext {
      * Fuzzer's logger.
      */
     PrettyLogger logger;
+
     @NonNull
     FuzzingData fuzzingData;
 
     String scenario;
     /**
-     * This is used to match again the response code received from the Service.
+     * This is used to match against the response code received from the Service.
      */
     ResponseCodeFamily expectedResponseCode;
     /**
@@ -46,12 +49,6 @@ public class SimpleExecutorContext {
      */
     @Builder.Default
     boolean replaceRefData = true;
-
-    /**
-     * This filter will be used to decide if the test will be executed or not. If the Predicate is true, the test will be executed.
-     */
-    @Builder.Default
-    Predicate<HttpMethod> runFilter = method -> true;
 
     /**
      * Any headers that will get removed before calling the service.
@@ -84,6 +81,12 @@ public class SimpleExecutorContext {
     boolean addUserHeaders = true;
 
     /**
+     * Whether to replace the path variables with the {@code --urlParams} supplied.
+     */
+    @Builder.Default
+    boolean replaceUrlParams = true;
+
+    /**
      * If populated, this will get appended after the "Should return XXX" text.
      */
     @Builder.Default
@@ -96,7 +99,23 @@ public class SimpleExecutorContext {
      */
     String path;
 
+    @Builder.Default
+    boolean matchResponseResult = true;
 
+    /**
+     * When sending large or malformed values the payload might not reach the application layer, but rather be rejected by the HTTP server.
+     * In those cases response content-type is typically html which will most likely won't match the OpenAPI spec.
+     * <p>
+     * Override this to return false to avoid content type checking.
+     */
+    @Builder.Default
+    boolean matchResponseContentType = true;
+
+    /**
+     * Gets the path. If the path is not set, it returns the path from the associated fuzzing data.
+     *
+     * @return The path, or the path from the associated fuzzing data if the path is not set.
+     */
     public String getPath() {
         if (path == null) {
             return fuzzingData.getPath();

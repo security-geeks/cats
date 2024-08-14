@@ -6,29 +6,39 @@ import com.endava.cats.args.FilesArguments;
 import com.endava.cats.fuzzer.fields.base.ExpectOnly2XXBaseFieldsFuzzer;
 import com.endava.cats.generator.simple.UnicodeGenerator;
 import com.endava.cats.http.ResponseCodeFamily;
+import com.endava.cats.http.ResponseCodeFamilyPredefined;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
-import com.endava.cats.strategy.CommonWithinMethods;
 import com.endava.cats.strategy.FuzzingStrategy;
-import com.endava.cats.util.CatsUtil;
 import io.swagger.v3.oas.models.media.Schema;
-
 import jakarta.inject.Singleton;
+
 import java.util.List;
 
+/**
+ * Fuzzer that sends abugidas characters in string fields for services following the sanitize then validate strategy.
+ */
 @Singleton
 @FieldFuzzer
 @SanitizeAndValidate
 public class AbugidasInStringFieldsSanitizeValidateFuzzer extends ExpectOnly2XXBaseFieldsFuzzer {
 
-    protected AbugidasInStringFieldsSanitizeValidateFuzzer(ServiceCaller sc, TestCaseListener lr, CatsUtil cu, FilesArguments cp) {
-        super(sc, lr, cu, cp);
+    /**
+     * Creates a new AbugidasInStringFieldsSanitizeValidateFuzzer instance.
+     *
+     * @param sc the service caller
+     * @param lr the test case listener
+     * @param cp files arguments
+     */
+    protected AbugidasInStringFieldsSanitizeValidateFuzzer(ServiceCaller sc, TestCaseListener lr, FilesArguments cp) {
+        super(sc, lr, cp);
     }
 
     @Override
     public List<FuzzingStrategy> getFieldFuzzingStrategy(FuzzingData data, String fuzzedField) {
-        return CommonWithinMethods.getFuzzingStrategies(data, fuzzedField, UnicodeGenerator.getAbugidasChars(), false);
+        Schema<?> fuzzedFieldSchema = data.getRequestPropertyTypes().get(fuzzedField);
+        return FuzzingStrategy.getFuzzingStrategies(fuzzedFieldSchema, UnicodeGenerator.getAbugidasChars(), false);
     }
 
     @Override
@@ -45,7 +55,7 @@ public class AbugidasInStringFieldsSanitizeValidateFuzzer extends ExpectOnly2XXB
 
     @Override
     public ResponseCodeFamily getExpectedHttpCodeWhenFuzzedValueNotMatchesPattern() {
-        return ResponseCodeFamily.FOURXX;
+        return ResponseCodeFamilyPredefined.FOURXX_TWOXX;
     }
 
     @Override

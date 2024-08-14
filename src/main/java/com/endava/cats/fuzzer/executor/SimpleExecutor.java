@@ -4,7 +4,6 @@ import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.io.ServiceData;
 import com.endava.cats.model.CatsResponse;
 import com.endava.cats.report.TestCaseListener;
-
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -31,40 +30,53 @@ public class SimpleExecutor {
     private final TestCaseListener testCaseListener;
     private final ServiceCaller serviceCaller;
 
+    /**
+     * Constructs a new instance of SimpleExecutor.
+     *
+     * <p>This executor is designed to simplify the execution of test cases by relying on a provided
+     * TestCaseListener for handling events and a ServiceCaller for making service calls during execution.</p>
+     *
+     * @param testCaseListener The TestCaseListener instance responsible for handling test case events.
+     * @param serviceCaller    The ServiceCaller instance responsible for making service calls during execution.
+     */
     @Inject
     public SimpleExecutor(TestCaseListener testCaseListener, ServiceCaller serviceCaller) {
         this.testCaseListener = testCaseListener;
         this.serviceCaller = serviceCaller;
     }
 
+    /**
+     * Executes the logic considering the given context.
+     * This method will do the actual HTTP call to the service and match the response against expected behaviour.
+     *
+     * @param context the executor context
+     */
     public void execute(SimpleExecutorContext context) {
         testCaseListener.createAndExecuteTest(context.getLogger(), context.getFuzzer(), () -> {
             testCaseListener.addScenario(context.getLogger(), context.getScenario());
             testCaseListener.addExpectedResult(context.getLogger(), "Should return {}" + context.getExpectedResult(), context.getExpectedSpecificResponseCode());
 
-            if (context.getRunFilter().test(context.getFuzzingData().getMethod())) {
-                CatsResponse response = serviceCaller.call(
-                        ServiceData.builder()
-                                .relativePath(context.getPath())
-                                .contractPath(context.getFuzzingData().getContractPath())
-                                .headers(context.getHeaders())
-                                .payload(context.getPayload())
-                                .queryParams(context.getFuzzingData().getQueryParams())
-                                .httpMethod(context.getHttpMethod())
-                                .contentType(context.getFuzzingData().getFirstRequestContentType())
-                                .replaceRefData(context.isReplaceRefData())
-                                .skippedHeaders(context.getSkippedHeaders())
-                                .addUserHeaders(context.isAddUserHeaders())
-                                .build());
+            CatsResponse response = serviceCaller.call(
+                    ServiceData.builder()
+                            .relativePath(context.getPath())
+                            .contractPath(context.getFuzzingData().getContractPath())
+                            .headers(context.getHeaders())
+                            .payload(context.getPayload())
+                            .queryParams(context.getFuzzingData().getQueryParams())
+                            .httpMethod(context.getHttpMethod())
+                            .contentType(context.getFuzzingData().getFirstRequestContentType())
+                            .replaceRefData(context.isReplaceRefData())
+                            .skippedHeaders(context.getSkippedHeaders())
+                            .addUserHeaders(context.isAddUserHeaders())
+                            .replaceUrlParams(context.isReplaceUrlParams())
+                            .pathParamsPayload(context.getFuzzingData().getPathParamsPayload())
+                            .build());
 
-                if (context.getResponseProcessor() != null) {
-                    context.getResponseProcessor().accept(response, context.getFuzzingData());
-                } else {
-                    testCaseListener.reportResult(context.getLogger(), context.getFuzzingData(), response, context.getExpectedResponseCode());
-                }
+            if (context.getResponseProcessor() != null) {
+                context.getResponseProcessor().accept(response, context.getFuzzingData());
             } else {
-                testCaseListener.skipTest(context.getLogger(), "Method %s not supported by %s".formatted(context.getFuzzingData().getMethod(), context.getFuzzer()));
+                testCaseListener.reportResult(context.getLogger(), context.getFuzzingData(), response, context.getExpectedResponseCode(), context.isMatchResponseResult(), context.isMatchResponseContentType());
             }
-        });
+        }, context.getFuzzingData());
     }
 }

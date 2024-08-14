@@ -5,26 +5,27 @@ import com.endava.cats.args.AuthArguments;
 import com.endava.cats.args.FilesArguments;
 import com.endava.cats.args.ProcessingArguments;
 import com.endava.cats.context.CatsGlobalContext;
-import com.endava.cats.dsl.CatsDSLParser;
 import com.endava.cats.http.HttpMethod;
 import com.endava.cats.model.CatsHeader;
 import com.endava.cats.model.CatsResponse;
-import com.endava.cats.model.KeyValuePair;
 import com.endava.cats.report.TestCaseListener;
-import com.endava.cats.util.CatsUtil;
+import com.endava.cats.util.KeyValuePair;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import com.github.tomakehurst.wiremock.http.Fault;
 import io.quarkus.test.junit.QuarkusTest;
+import jakarta.inject.Inject;
 import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import jakarta.inject.Inject;
 import java.io.File;
 import java.net.Proxy;
 import java.util.ArrayDeque;
@@ -43,8 +44,6 @@ class ServiceCallerTest {
     @Inject
     AuthArguments authArguments;
     @Inject
-    CatsUtil catsUtil;
-    @Inject
     ApiArguments apiArguments;
     @Inject
     ProcessingArguments processingArguments;
@@ -62,6 +61,12 @@ class ServiceCallerTest {
         wireMockServer.stubFor(WireMock.put("/pets").willReturn(WireMock.aResponse().withBody("{'result':'OK'}")));
         wireMockServer.stubFor(WireMock.get("/pets/1").willReturn(WireMock.aResponse().withBody("{'pet':'pet'}")));
         wireMockServer.stubFor(WireMock.get("/pets/1?limit=2").willReturn(WireMock.aResponse().withBody("{'pet':'pet'}")));
+        wireMockServer.stubFor(WireMock.get("/pets/999?id=1").willReturn(WireMock.aResponse().withBody("{'pet':'pet'}")));
+        wireMockServer.stubFor(WireMock.get("/pets/fault/reset").willReturn(WireMock.aResponse().withFault(Fault.CONNECTION_RESET_BY_PEER)));
+        wireMockServer.stubFor(WireMock.get("/pets/fault/empty").willReturn(WireMock.aResponse().withFault(Fault.EMPTY_RESPONSE)));
+        wireMockServer.stubFor(WireMock.get("/pets/fault/malformed").willReturn(WireMock.aResponse().withFault(Fault.MALFORMED_RESPONSE_CHUNK)));
+        wireMockServer.stubFor(WireMock.get("/pets/fault/random").willReturn(WireMock.aResponse().withFault(Fault.RANDOM_DATA_THEN_CLOSE)));
+
         wireMockServer.stubFor(WireMock.delete("/pets/1").willReturn(WireMock.aResponse()));
         wireMockServer.stubFor(WireMock.head(WireMock.urlEqualTo("/pets/1")).willReturn(WireMock.aResponse()));
         wireMockServer.stubFor(WireMock.trace(WireMock.urlEqualTo("/pets/1")).willReturn(WireMock.aResponse()));
@@ -77,13 +82,13 @@ class ServiceCallerTest {
     public void setupEach() throws Exception {
         filesArguments = new FilesArguments();
         TestCaseListener testCaseListener = Mockito.mock(TestCaseListener.class);
-        serviceCaller = new ServiceCaller(catsGlobalContext, testCaseListener, catsUtil, filesArguments, authArguments, apiArguments, processingArguments);
+        serviceCaller = new ServiceCaller(catsGlobalContext, testCaseListener, filesArguments, authArguments, apiArguments, processingArguments);
         ReflectionTestUtils.setField(apiArguments, "server", "http://localhost:" + wireMockServer.port());
         ReflectionTestUtils.setField(authArguments, "basicAuth", "user:password");
         ReflectionTestUtils.setField(filesArguments, "refDataFile", new File("src/test/resources/refFields.yml"));
         ReflectionTestUtils.setField(filesArguments, "headersFile", new File("src/test/resources/headers.yml"));
         ReflectionTestUtils.setField(filesArguments, "queryFile", new File("src/test/resources/queryParamsEmpty.yml"));
-        ReflectionTestUtils.setField(filesArguments, "params", List.of("id=1", "test=2"));
+        ReflectionTestUtils.setField(filesArguments, "params", List.of("gid:1", "test:2"));
         ReflectionTestUtils.setField(authArguments, "sslKeystore", null);
         ReflectionTestUtils.setField(authArguments, "proxyHost", null);
         ReflectionTestUtils.setField(authArguments, "proxyPort", 0);
@@ -167,6 +172,20 @@ class ServiceCallerTest {
         Assertions.assertThat(catsResponse.getJsonBody().toString()).contains("notAJson");
     }
 
+    @ParameterizedTest
+    @CsvSource({"/pets/fault/reset,958,connection reset", "/pets/fault/malformed,957,protocol exception", "/pets/fault/random,952,empty reply from server", "/pets/fault/empty,952,empty reply from server"})
+    void shouldHandleIOExceptions(String path, String responseCode, String expectedBody) {
+        serviceCaller.initHttpClient();
+        serviceCaller.initRateLimiter();
+
+        CatsResponse catsResponse = serviceCaller.call(ServiceData.builder().relativePath(path).httpMethod(HttpMethod.GET)
+                .headers(Collections.singleton(CatsHeader.builder().name("header").value("header").build())).contentType("application/json").build());
+
+        Assertions.assertThat(catsResponse.responseCodeAsString()).isEqualTo(responseCode);
+        Assertions.assertThat(catsResponse.getBody()).contains(expectedBody);
+        Assertions.assertThat(catsResponse.getJsonBody().toString()).contains("notAJson");
+    }
+
     @Test
     void shouldNotConvertToUrlFormEncodedWhenError() {
         serviceCaller.initHttpClient();
@@ -239,7 +258,8 @@ class ServiceCallerTest {
 
         ServiceData data = ServiceData.builder().relativePath("/pets").payload("{'field':'oldValue'}").httpMethod(HttpMethod.POST)
                 .headers(Collections.singleton(CatsHeader.builder().name("header").value("header").build())).contentType("application/json").build();
-        Assertions.assertThatThrownBy(() -> serviceCaller.call(data)).isInstanceOf(RuntimeException.class);
+        CatsResponse response = serviceCaller.call(data);
+        Assertions.assertThat(response.getResponseCode()).isEqualTo(953);
     }
 
     @Test
@@ -360,7 +380,7 @@ class ServiceCallerTest {
         ServiceData data = ServiceData.builder().headers(Set.of(CatsHeader.builder().name("catsFuzzedHeader").value("  anotherValue").build()))
                 .fuzzedHeader("catsFuzzedHeader").contentType("application/json").build();
         List<KeyValuePair<String, Object>> headers = serviceCaller.buildHeaders(data);
-        List<KeyValuePair<String, Object>> catsHeader = headers.stream().filter(header -> header.getKey().equalsIgnoreCase("catsFuzzedHeader")).collect(Collectors.toList());
+        List<KeyValuePair<String, Object>> catsHeader = headers.stream().filter(header -> header.getKey().equalsIgnoreCase("catsFuzzedHeader")).toList();
 
         Assertions.assertThat(catsHeader).hasSize(1);
         Assertions.assertThat(catsHeader.get(0).getValue()).isEqualTo("  cats");
@@ -373,10 +393,10 @@ class ServiceCallerTest {
                 .fuzzedHeader("catsFuzzedHeader").addUserHeaders(false).contentType("application/json").build();
 
         List<KeyValuePair<String, Object>> headers = serviceCaller.buildHeaders(data);
-        List<String> headerNames = headers.stream().map(KeyValuePair::getKey).collect(Collectors.toList());
+        List<String> headerNames = headers.stream().map(KeyValuePair::getKey).toList();
         Assertions.assertThat(headerNames).doesNotContain("header").contains("catsFuzzedHeader", "simpleHeader");
 
-        List<KeyValuePair<String, Object>> catsHeader = headers.stream().filter(header -> header.getKey().equalsIgnoreCase("catsFuzzedHeader")).collect(Collectors.toList());
+        List<KeyValuePair<String, Object>> catsHeader = headers.stream().filter(header -> header.getKey().equalsIgnoreCase("catsFuzzedHeader")).toList();
         Assertions.assertThat(catsHeader).hasSize(1);
         Assertions.assertThat(catsHeader.get(0).getValue()).isEqualTo("cats");
     }
@@ -385,11 +405,11 @@ class ServiceCallerTest {
     void shouldAddHeaderWhenAddUserHeadersOffButAuthenticationHeader() {
         ServiceData data = ServiceData.builder()
                 .headers(Set.of(CatsHeader.builder().name("simpleHeader").value("simpleValue").build()))
-                .relativePath("auth-header")
+                .relativePath("auth-header").contractPath("auth-header")
                 .fuzzedHeader("catsFuzzedHeader").addUserHeaders(false).contentType("application/json").build();
 
         List<KeyValuePair<String, Object>> headers = serviceCaller.buildHeaders(data);
-        List<String> headerNames = headers.stream().map(KeyValuePair::getKey).collect(Collectors.toList());
+        List<String> headerNames = headers.stream().map(KeyValuePair::getKey).toList();
         Assertions.assertThat(headerNames).doesNotContain("header", "catsFuzzedHeader").contains("simpleHeader", "jwt");
     }
 
@@ -446,5 +466,34 @@ class ServiceCallerTest {
 
         Map<String, String> cachedPost = serviceCaller.getPathParamFromCorrespondingPostIfDelete(data);
         Assertions.assertThat(cachedPost).containsEntry("testId", "23");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"999,true,/pets/999?id=1", "1,false,/pets/1"})
+    void shouldReplaceUrlParams(String id, boolean replaceUrlParams, String expectedUrl) {
+        serviceCaller.initHttpClient();
+        serviceCaller.initRateLimiter();
+        ReflectionTestUtils.setField(filesArguments, "params", List.of("id:" + id, "test:2"));
+        filesArguments.loadURLParams();
+
+        CatsResponse catsResponse = serviceCaller.call(ServiceData.builder().relativePath("/pets/{id}").payload("{'id':'1'}")
+                .httpMethod(HttpMethod.GET).headers(Collections.singleton(CatsHeader.builder().name("header").value("header")
+                        .build())).contentType("application/json").replaceUrlParams(replaceUrlParams).build());
+
+        Assertions.assertThat(catsResponse).isNotNull();
+        wireMockServer.verify(WireMock.getRequestedFor(WireMock.urlEqualTo(expectedUrl)));
+    }
+
+    @Test
+    void shouldReplacePathVariables() {
+        String json = """
+                {
+                    "configId": "123",
+                    "tenantId": "abcd"
+                }
+                """;
+        String url = "http://localhost:8080/configs/{configId}/tenants/{tenantId}";
+        String result = serviceCaller.addPathParamsIfNotReplaced(url, json);
+        Assertions.assertThat(result).isEqualTo("http://localhost:8080/configs/123/tenants/abcd");
     }
 }

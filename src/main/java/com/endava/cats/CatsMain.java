@@ -5,14 +5,15 @@ import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.github.ludovicianul.prettylogger.PrettyLoggerFactory;
 import io.quarkus.runtime.QuarkusApplication;
 import io.quarkus.runtime.annotations.QuarkusMain;
+import jakarta.inject.Inject;
 import picocli.CommandLine;
 
-import jakarta.inject.Inject;
+import java.util.Arrays;
+import java.util.Locale;
 
 /**
- * We need to print the build version and build time
+ * Main application entry point.
  */
-
 @QuarkusMain
 public class CatsMain implements QuarkusApplication {
 
@@ -30,10 +31,22 @@ public class CatsMain implements QuarkusApplication {
             logger.fatal("Something unexpected happened: {}", e.getMessage());
             logger.debug("Stacktrace", e);
         });
+        checkForConsoleColorsDisabled(args);
 
         return new CommandLine(catsCommand, factory)
-                .setCaseInsensitiveEnumValuesAllowed(true).setColorScheme(colorScheme())
+                .setCaseInsensitiveEnumValuesAllowed(true)
+                .setColorScheme(colorScheme())
+                .setAbbreviatedOptionsAllowed(true)
+                .setAbbreviatedSubcommandsAllowed(true)
                 .execute(args);
+    }
+
+    private void checkForConsoleColorsDisabled(String... args) {
+        boolean colorsDisabled = Arrays.stream(args).anyMatch(arg -> arg.trim().toLowerCase(Locale.ROOT).equals("--no-color"));
+        if (colorsDisabled) {
+            PrettyLogger.disableColors();
+            PrettyLogger.changeMessageFormat("%1$-12s");
+        }
     }
 
     CommandLine.Help.ColorScheme colorScheme() {

@@ -9,18 +9,27 @@ import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
 import com.endava.cats.strategy.FuzzingStrategy;
-import com.endava.cats.util.CatsUtil;
-
 import jakarta.inject.Singleton;
+
 import java.util.List;
 
+/**
+ * Fuzzer that sends zalgo text in fields for the sanitize then validate strategy.
+ */
 @Singleton
 @FieldFuzzer
 @SanitizeAndValidate
 public class ZalgoTextInFieldsSanitizeValidateFuzzer extends ExpectOnly2XXBaseFieldsFuzzer {
 
-    protected ZalgoTextInFieldsSanitizeValidateFuzzer(ServiceCaller sc, TestCaseListener lr, CatsUtil cu, FilesArguments cp) {
-        super(sc, lr, cu, cp);
+    /**
+     * Creates a new ZalgoTextInFieldsSanitizeValidateFuzzer instance.
+     *
+     * @param sc the service caller
+     * @param lr the test case listener
+     * @param cp files arguments
+     */
+    protected ZalgoTextInFieldsSanitizeValidateFuzzer(ServiceCaller sc, TestCaseListener lr, FilesArguments cp) {
+        super(sc, lr, cp);
     }
 
     @Override

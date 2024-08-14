@@ -7,18 +7,27 @@ import com.endava.cats.generator.simple.StringGenerator;
 import com.endava.cats.io.ServiceCaller;
 import com.endava.cats.model.FuzzingData;
 import com.endava.cats.report.TestCaseListener;
-import com.endava.cats.util.CatsUtil;
 import io.swagger.v3.oas.models.media.Schema;
-
 import jakarta.inject.Singleton;
+
 import java.util.List;
 
+/**
+ * Fuzzer that sends random strings in boolean fiedls.
+ */
 @Singleton
 @FieldFuzzer
 public class RandomStringsInBooleanFieldsFuzzer extends BaseBoundaryFieldFuzzer {
 
-    public RandomStringsInBooleanFieldsFuzzer(ServiceCaller sc, TestCaseListener lr, CatsUtil cu, FilesArguments cp) {
-        super(sc, lr, cu, cp);
+    /**
+     * Creates a new RandomStringsInBooleanFieldsFuzzer instance.
+     *
+     * @param sc the service caller
+     * @param lr the test case listener
+     * @param cp filter arguments
+     */
+    public RandomStringsInBooleanFieldsFuzzer(ServiceCaller sc, TestCaseListener lr, FilesArguments cp) {
+        super(sc, lr, cp);
     }
 
     @Override

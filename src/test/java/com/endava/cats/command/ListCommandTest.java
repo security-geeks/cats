@@ -1,17 +1,19 @@
 package com.endava.cats.command;
 
 import com.endava.cats.fuzzer.api.Fuzzer;
+import com.endava.cats.fuzzer.special.mutators.api.Mutator;
 import com.endava.cats.generator.format.api.OpenAPIFormat;
+import io.github.ludovicianul.prettylogger.PrettyLogger;
 import io.quarkus.test.junit.QuarkusTest;
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
+import org.springframework.test.util.ReflectionTestUtils;
 import picocli.CommandLine;
-
-import jakarta.enterprise.inject.Instance;
-import jakarta.inject.Inject;
 
 @QuarkusTest
 class ListCommandTest {
@@ -22,11 +24,14 @@ class ListCommandTest {
     @Inject
     Instance<OpenAPIFormat> formats;
 
+    @Inject
+    Instance<Mutator> mutators;
+
     private ListCommand listCommand;
 
     @BeforeEach
     void setup() {
-        listCommand = new ListCommand(fuzzers, formats);
+        listCommand = new ListCommand(fuzzers, formats, mutators);
     }
 
     @Test
@@ -37,6 +42,26 @@ class ListCommandTest {
         Mockito.verify(spyListCommand, Mockito.times(1)).listFormats();
         commandLine.execute("--formats", "-j");
         Mockito.verify(spyListCommand, Mockito.times(2)).listFormats();
+    }
+
+    @Test
+    void shouldListMutators() {
+        ListCommand spyListCommand = Mockito.spy(listCommand);
+        CommandLine commandLine = new CommandLine(spyListCommand);
+        commandLine.execute("--mutators");
+        Mockito.verify(spyListCommand, Mockito.times(1)).listMutators();
+        commandLine.execute("--mutators", "-j");
+        Mockito.verify(spyListCommand, Mockito.times(2)).listMutators();
+    }
+
+    @Test
+    void shouldListMutatorsTypes() {
+        ListCommand spyListCommand = Mockito.spy(listCommand);
+        CommandLine commandLine = new CommandLine(spyListCommand);
+        commandLine.execute("--cmt");
+        Mockito.verify(spyListCommand, Mockito.times(1)).listMutatorsTypes();
+        commandLine.execute("--cmt", "-j");
+        Mockito.verify(spyListCommand, Mockito.times(2)).listMutatorsTypes();
     }
 
     @Test
@@ -62,6 +87,23 @@ class ListCommandTest {
         CommandLine commandLine = new CommandLine(spyListCommand);
         commandLine.execute("-p", "-j", "-c", "src/test/resources/openapi.yml");
         Mockito.verify(spyListCommand, Mockito.times(1)).listContractPaths();
+    }
+
+    @Test
+    void shouldListPathDetails() {
+        ListCommand spyListCommand = Mockito.spy(listCommand);
+        PrettyLogger spyLogger = Mockito.spy(PrettyLogger.class);
+        ReflectionTestUtils.setField(spyListCommand, "logger", spyLogger);
+        CommandLine commandLine = new CommandLine(spyListCommand);
+        commandLine.execute("-p", "-j", "-c", "src/test/resources/openapi.yml", "--path", "/pet");
+        Mockito.verify(spyListCommand, Mockito.times(1)).listPath(Mockito.any(), Mockito.eq("/pet"));
+        Mockito.verify(spyLogger, Mockito.times(1)).noFormat(Mockito.any());
+
+        Mockito.reset(spyListCommand, spyLogger);
+        commandLine.execute("-p", "-c", "src/test/resources/openapi.yml", "--path", "/pet");
+        Mockito.verify(spyListCommand, Mockito.times(1)).listPath(Mockito.any(), Mockito.eq("/pet"));
+        Mockito.verify(spyLogger, Mockito.times(19)).noFormat(Mockito.any());
+
     }
 
     @Test
